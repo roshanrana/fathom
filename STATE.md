@@ -10,9 +10,10 @@ prototype, one pitch slide, live-demo readiness. Due 2026-09-12.
 ## Now / next
 - G0–G6.2 passed; G3 re-entered twice (D-006/D-008, D-009) with evidence. Private repo `roshanrana/fathom`, CI green on every push.
 - Done (PASS): T-000 (v2), T-001, T-002, T-003, T-004, T-005, T-006 (closed after T-014), T-007, T-008, T-009, T-010, T-012, T-013 (v2), T-014. Security reviews CLEAR or closed.
-- In progress: T-011 attempt 2 (three stale figures after T-013 v2) → verify → G6.3.
-- Orchestrator deliverables done: pitch slide `docs/pitch/fathom-pitch.pptx` (+png), runbook, ORR, change record, graph README, RTM.
-- Next: assurance report → G7; evidence export → G8; ship (make repo public is the owner's call); memory + portfolio-publish gate.
+- Also done: T-015 (v2, D-010 transport errors — from the G7 resilience check), T-016 (D-011 demo polish). All 17 packs PASS except T-011.
+- In progress: T-011 attempt 3 (final figure + screenshot refresh after the last code tasks) → verify → G6.3.
+- Orchestrator deliverables done: pitch slide `docs/pitch/fathom-pitch.pptx` (+png), runbook, ORR, change record, demo checklist, assurance report, graph README, RTM.
+- Next: G6.3 → G7 → evidence export → G8 → ship. Making the repo public and the portfolio publication are the owner's calls (publish-at-ship gate).
 - Backlog (accepted, non-blocking): providers 2xx JSON shape validation (T-004 F1 MEDIUM); Anthropic temperature pin (LOW); CLI `ask` empty-question min bound (T-013 LOW); guard scans `Claim.text` only, not `quote` (T-005/T-007 LOW; quotes are not rendered); MCD fallback polish — `10-K:9A` absorbs Item 9B/15 text and `10-K:1` cuts at "INTELLECTUAL PROPERTY" (T-013 v2 HIGH non-blocking); retrieval hit-rate 0.7786 vs 0.9 aspiration (informational KPI); `metrics/card.md` timestamp churn on every gate run; Streamlit `use_container_width` deprecation.
 - RTM gaps (accepted): FR-016 fetch script has no test (owner tool, run once); FR-017 docs have no automated test (verified by T-011's Verifier); NFR-002 live latency is reported from the audit log, not gated.
 
@@ -60,6 +61,9 @@ prototype, one pitch slide, live-demo readiness. Due 2026-09-12.
 2026-09-12T15:35Z T-012 HANDOFF v1 in≈40k calls 30 commit a268fba; T-012 PASS seq 24. T-013 HANDOFF v1 in≈80k calls 70 commit 770fc3d
 2026-09-12T15:50Z T-013 verdict FAIL v1 (fallback captured wrong bodies in 4/10 filings) → D-009 tightened spec; security CLEAR. T-011 HANDOFF v1 in≈110k calls 70 commit 9eff1ce
 2026-09-12T16:00Z T-013 HANDOFF v2 in≈50k calls 40 commit 7b4e3c3; T-013 PASS v2 seq 25 (2 HIGH non-blocking polish notes → backlog). T-011 verdict FAIL v1 (stale figures) → attempt 2
+2026-09-12T16:20Z G7 resilience check: raw httpx.ConnectError escaped → D-010, T-015 dispatched; T-011 HANDOFF v2 (figures) commit b0f…; D-011 demo polish → T-016 dispatched
+2026-09-12T16:45Z T-015 HANDOFF v1 commit 96e218e; verdict FAIL v1 (null completion → pydantic error); security CLEAR (closes T-004 F1). T-016 HANDOFF v1 commit c7beea3
+2026-09-12T17:00Z T-015 HANDOFF v2 commit cc9df01; T-016 PASS seq 26; T-015 PASS v2 seq 27 (31-case fuzz). T-011 attempt 3 dispatched (final refresh + screenshots)
 
 ## Budget ledger
 | Task | Tier | Planned in-tok | Actual | Calls | Attempts | Outcome |
@@ -79,6 +83,8 @@ prototype, one pitch slide, live-demo readiness. Due 2026-09-12.
 | T-012 | T2 | 40000 | ~40000 (1.00×) | 30 | 1 | PASS |
 | T-013 | T2 | 80000 | ~130000 (1.63×, two attempts) | 110 | 2 | PASS |
 | T-014 | T2 | 40000 | ~30000 (0.75×) | 20 | 1 | PASS |
+| T-015 | T2 | 40000 | ~60000 (1.50×, two attempts) | 45 | 2 | PASS |
+| T-016 | T2 | 40000 | ~45000 (1.13×) | 35 | 1 | PASS |
 | Verifiers (15 runs) | T2 | ~30000 each | ~110000 each (subagent total incl. tool output) | 20–36 | — | — |
 
 ## Gate log

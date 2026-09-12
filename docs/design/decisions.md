@@ -166,3 +166,22 @@ metric row ("Prices: AlphaDojo/dojo_stock_kline as of 2026-09-11 · Snapshot: Al
 as of 2026-09-11 16:00 UTC"). Delivered by T-016 (risk low). Verified share stays 1.0 by
 construction; bench claims counts change and metrics are regenerated.
 Approver: Architecture lead (standing authorisation, D-000).
+
+## D-012 — Retrospective and routing lessons   (2026-09-12, phase 8, status: recorded)
+What worked: 17 packs, 20 Sonnet implementer runs, 19 fresh-context verifier runs and 7
+security reviews in one day with no T3 code; every defect was caught by an independent role
+(verifiers caught 4 real bugs — dependency-group extras, wrong fallback bodies, null completion
+values, stale figures; security reviewers caught 1 HIGH, 2 MEDIUM; the G7 resilience check
+caught the transport-error gap). Pinned-worktree verification and explicit-path staging worked
+without a single mis-attributed commit.
+What to change next time: (1) the Orchestrator's own frozen specs were the largest source of
+rework (D-006, D-009 — the parser fallback took two attempts because the first spec had no
+stop boundary and a per-section trigger); write a content-level acceptance test into any spec
+that touches unstructured text before dispatching. (2) Docs packs must run last, once, after all
+code tasks — T-011 needed three attempts because figures moved. (3) `normal` packs ran at
+0.75–1.5× budget; `high` packs at 0.5–1.6× — budgets were right-sized; two-attempt tasks are the
+cost driver, not pack size. (4) Verifiers sometimes write verdicts into the worktree copy of the
+file; the dispatch prompt should always name the live-tree path (it did from T-006 on) and the
+Orchestrator should copy before removing the worktree. (5) The metrics card embeds a timing
+value that changes every gate run; keep timing out of committed artefacts next time.
+Approver: Delivery lead (standing authorisation, D-000).
