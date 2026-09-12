@@ -155,19 +155,26 @@ Parser algorithm (frozen):
 5. Emit only canonical ids, in document order, with `char_start/char_end` into the normalised
    text. Missing canonical ids are simply absent (callers cope); a filing with zero canonical
    sections raises `PARSE_FAILED`.
-7. Heading-vocabulary fallback (D-006). After step 4, for any canonical id whose chosen body is
-   shorter than 400 characters (cross-reference-sheet filings whose items point at page numbers),
-   scan the normalised text for heading lines — a line whose stripped content is at most 120
-   characters and starts, case-insensitively, with one of the id's title keys: `10-K:1`
-   {"description of the business", "business summary", "business"}, `10-K:1A` {"risk factors"},
-   `10-K:1C` {"cybersecurity"}, `10-K:3` {"legal proceedings"}, `10-K:7` {"management's discussion
-   and analysis", "management’s discussion and analysis"}, `10-K:7A` {"quantitative and qualitative
-   disclosures"}, `10-K:9A` {"controls and procedures"} (10-Q ids: the same keys for the matching
-   titles). Each candidate body runs from the end of the heading line to the next heading line
-   matching any key of any id, or the next Item header, or end of text. Choose the longest
-   candidate; use it only if it is longer than the step-4 body. The fallback must leave every
-   filing whose step-4 bodies are all ≥ 400 characters byte-identical (a regression test hashes
-   all sections of the other 96 fixtures before and after).
+7. Heading-vocabulary fallback (D-006, tightened by D-009). Applies to 10-K only. **Trigger
+   (filing level):** after step 4, count the canonical 10-K ids whose chosen body is shorter than
+   400 characters; the fallback runs only when that count is at least 4 (the cross-reference-sheet
+   signature; a single short "Item 3. Legal Proceedings — None." is legitimate and must not
+   trigger it). When triggered it is applied to every canonical id of that filing whose body is
+   under 400 characters. **Heading line:** a line whose stripped content is at most 100
+   characters, does not end with a period, and starts, case-insensitively, with one of the id's
+   title keys: `10-K:1` {"description of the business", "business summary"}, `10-K:1A` {"risk
+   factors"}, `10-K:1C` {"cybersecurity"}, `10-K:3` {"legal proceedings"}, `10-K:7` {"management's
+   discussion and analysis", "management’s discussion and analysis"}, `10-K:7A` {"quantitative and
+   qualitative disclosures"}, `10-K:9A` {"controls and procedures"}. **End boundary:** the candidate
+   body runs from the end of the heading line to the earliest of: the next heading line matching
+   any key of any id; the next Item header; the next *stop line* — a line whose stripped content
+   is at most 100 characters, has at least three letters, contains no period, and is entirely
+   upper-case (e.g. "SIGNATURES", "EXHIBIT INDEX", "CONSOLIDATED STATEMENT OF INCOME", "NOTES TO
+   CONSOLIDATED FINANCIAL STATEMENTS") but is not the heading line itself; or end of text. Among
+   candidates choose the longest; use it only if it is longer than the step-4 body and at most
+   120 000 characters. **Invariant:** every filing that does not meet the trigger is byte-identical
+   before and after (regression manifest over all 96 non-triggering fixtures); in the current
+   fixture set only McDonald's FY2025 10-K triggers.
 8. `period_end`: search the first 4 000 characters with
    `re.compile(r"for the (?:fiscal|quarterly)?\s*(?:year|period)\s+ended\s+([A-Z][a-z]+)\s+(\d{1,2})\s*,?\s*(\d{4})", re.I | re.S)`; parse month name; None on failure.
 

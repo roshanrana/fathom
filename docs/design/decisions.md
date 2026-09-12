@@ -125,3 +125,19 @@ Addendum (T-013 handoff, accepted): pattern 1 gains an optional `(be\s+)?` so pr
 ("should be buying") trip the guard; LLD §6.4 updated. The §2.5 step 7 fallback also activates
 for nine other 10-Ks that have at least one canonical body under 400 characters — the LLD's
 stated trigger, verified by T-013's Verifier on a per-filing spot check.
+
+## D-009 — Parser fallback tightened after T-013 attempt 1 FAIL   (2026-09-12, phase 6, status: accepted)
+Context: T-013's Verifier spot-checked the ten 10-Ks the step-7 fallback changed and found four
+wrong or contaminated bodies (CAT Item 3 matched a Part III sub-heading; CVX Item 7 matched an
+inline sentence; XOM and JPM Item 7 overran into signatures and notes) plus a 10-Q key-collision
+bug. Root cause: the LLD's trigger was per-section (a legitimately short "None." section
+triggered it) and the end boundary had no notion of a stop heading.
+Decision: LLD §2.5 step 7 rewritten — 10-K only; filing-level trigger (≥ 4 short canonical
+bodies); heading lines ≤ 100 chars without a terminal period; a generic all-caps stop line ends
+a candidate; 120 000-character cap; invariant that non-triggering filings are byte-identical.
+The "business" bare key is removed (too promiscuous). T-013 attempt 2 implements it with the
+verdict as input; a second FAIL blocks T-013 and the fallback is reverted (MCD keeps a thin
+briefing, documented in ASSUMPTIONS).
+Consequences: regression manifest expectation returns to "only MCD changes"; T-011's quoted
+figures are re-checked after attempt 2.
+Approver: Architecture lead (standing authorisation, D-000).
