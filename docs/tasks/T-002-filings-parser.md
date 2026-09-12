@@ -33,9 +33,10 @@ def period_end(text: str) -> date | None
 Canonical ids/titles: 10-K → `10-K:1` Business, `10-K:1A` Risk Factors, `10-K:1C` Cybersecurity,
 `10-K:3` Legal Proceedings, `10-K:7` Management's Discussion and Analysis, `10-K:7A` Market Risk,
 `10-K:9A` Controls and Procedures; 10-Q → `10-Q:I.2` MD&A, `10-Q:I.3` Market Risk, `10-Q:I.4`
-Controls and Procedures, `10-Q:II.1` Legal Proceedings, `10-Q:II.1A` Risk Factors. Put the table in
-`fathom/prompts.py` as `CANONICAL_SECTIONS: dict[str, str]` (id → title) — this task creates
-`prompts.py` with only that constant; T-004 adds the prompt text to the same file.
+Controls and Procedures, `10-Q:II.1` Legal Proceedings, `10-Q:II.1A` Risk Factors. Define the table
+in `fathom/filings.py` as `CANONICAL_SECTIONS: dict[str, str]` (id → title, in the order above).
+(T-004 defines the same constant in `fathom/prompts.py` for the prompt layer; T-006 asserts the
+two are equal. Do not create or touch `prompts.py` in this task.)
 Parser algorithm (frozen, LLD §2.5 steps 1–6): replace `\xa0`; `HEADER =
 re.compile(r"^[ \t]*item[ \t]+(\d{1,2}[a-c]?)[ \t]*[.:\-—–]?[ \t]*([^\n]{0,120})$", re.I | re.M)`;
 `PART = re.compile(r"^[ \t]*part[ \t]+(i{1,2})\b", re.I | re.M)` (10-Q only, default part I);
@@ -45,7 +46,6 @@ with the longest body; emit canonical ids in document order; zero canonical sect
 
 ## Scope (files this task may touch)
 - fathom/filings.py
-- fathom/prompts.py (CANONICAL_SECTIONS only)
 - tests/test_filings.py
 
 ## Acceptance criteria
@@ -59,7 +59,7 @@ with the longest body; emit canonical ids in document order; zero canonical sect
 
 ## Validation commands (targeted)
 - `uv run pytest tests/test_filings.py -q`
-- `uv run ruff check fathom/filings.py fathom/prompts.py tests/test_filings.py && uv run mypy fathom`
+- `uv run ruff check fathom/filings.py tests/test_filings.py && uv run mypy fathom`
 
 ## Verification checklist (for the Verifier)
 - [ ] scope respected

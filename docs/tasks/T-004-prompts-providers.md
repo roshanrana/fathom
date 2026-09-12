@@ -51,7 +51,7 @@ none qualifies. Return `json.dumps` of `BriefingDraft`/`AnswerDraft`-shaped dict
 accession, section_id, quote). Probe task (`"ping": true`) → `"pong"`.
 
 ## Scope (files this task may touch)
-- fathom/prompts.py (add SYSTEM_BRIEFING, SYSTEM_ASK, SYSTEM_PROBE, SECTION_CAPS; keep CANONICAL_SECTIONS from T-002 if present, else create it per LLD §2.5)
+- fathom/prompts.py (new file: CANONICAL_SECTIONS per LLD §2.5 table — 12 entries, id → title, in table order — plus SYSTEM_BRIEFING, SYSTEM_ASK, SYSTEM_PROBE, SECTION_CAPS; do not import from fathom.filings, which T-002 is writing concurrently)
 - fathom/providers.py
 - tests/test_providers.py, tests/test_prompts.py
 
