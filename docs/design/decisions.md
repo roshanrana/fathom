@@ -186,6 +186,18 @@ Consequences: any US-listed ticker works in live mode; fixture mode is unchanged
 the demo default; the SEC contact e-mail is an operator setting, never committed.
 Approver: Delivery lead / architecture lead (standing authorisation, D-000).
 
+## D-014 — M4 retrospective: the security ratchet on parsing code   (2026-09-12, phase 8, status: recorded)
+M4 took 7 packs (T-018 … T-023 plus T-021 docs), 12 implementer runs and 14 review runs. The
+live-data code was verified PASS on first or second attempt every time, but each fresh
+Security Reviewer probed one level deeper into untrusted-input parsing (enumerated exception
+classes → AttributeError; `$` anchors → newline bypass; timestamp overflow; concept payload
+type). Lesson: for code that parses third-party payloads, specify the whole-body guard, the
+`fullmatch` rule and a fuzz test as acceptance criteria up front (now in `05-m4-live-data.md`
+§4 via the T-023 amendments) instead of enumerating failure modes. The fixture-mode gate never
+touched the network (NFR-013 held); the real end-to-end check was run by the Orchestrator and
+by the T-021 network smoke test. Residual LOW items are listed in STATE.md.
+Approver: Delivery lead (standing authorisation, D-000).
+
 ## D-012 — Retrospective and routing lessons   (2026-09-12, phase 8, status: recorded)
 What worked: 17 packs, 20 Sonnet implementer runs, 19 fresh-context verifier runs and 7
 security reviews in one day with no T3 code; every defect was caught by an independent role

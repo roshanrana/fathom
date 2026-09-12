@@ -10,7 +10,9 @@ prototype, one pitch slide, live-demo readiness. Due 2026-09-12.
 ## Now / next
 - G0–G6.2 passed; G3 re-entered twice (D-006/D-008, D-009) with evidence. Private repo `roshanrana/fathom`, CI green on every push.
 - Done (PASS): T-000 (v2), T-001, T-002, T-003, T-004, T-005, T-006 (closed after T-014), T-007, T-008, T-009, T-010, T-012, T-013 (v2), T-014. Security reviews CLEAR or closed.
-- M4 (owner request 2026-09-12: "work with data from live but free sources"): spec `docs/design/05-m4-live-data.md`, D-013, packs T-018 … T-021; G1–G4 re-entry for M4 ledgered. W7 = T-018 in progress.
+- M4 (owner request 2026-09-12: "work with data from live but free sources"): spec `docs/design/05-m4-live-data.md`, D-013; G1–G4 re-entry ledgered (seq 33). Packs: T-018 PASS (security → T-022 CLEAR), T-019 PASS (security → T-023), T-020 PASS v3 + CLEAR, T-021 PASS (network smoke NFLX/COST ≈ 2 s), T-022 PASS + CLEAR, T-023 PASS v3 — final security HIGH (concept payload type) in attempt 4 with one combined final review.
+- Real live check (Orchestrator): `fathom fetch NFLX` → 5 EDGAR filings, all canonical sections, Yahoo bars to 2026-09-11, XBRL snapshot; `fathom brief NFLX` 12/12 verified.
+- Next: T-023 v4 review → G6.4 → G7/G8 addenda → evidence export → tag v0.2.0. Owner: set `FATHOM_SEC_CONTACT` to use live mode; Stooq intermittently serves a bot-challenge page (Yahoo is primary).
 - Shipped v0.1.0 before M4: tag `v0.1.0`, all 18 packs PASS (T-000 … T-017), gates G0–G8 in the ledger (31 entries, chain valid), evidence pack exported under `docs/evidence/pack-2026-09-12/`, CI green on `main`.
 - Deliverables for the challenge: prototype (Streamlit `fathom app`, CLI, API, MCP), one slide `docs/pitch/fathom-pitch.pptx`, demo checklist `docs/ops/demo-checklist.md`.
 - Owner decisions pending: (1) make `roshanrana/fathom` public (currently private); (2) run the `portfolio-publish` skill (profile README, LinkedIn, resume) — approval gate first; (3) on interview day, set `PORTKEY_API_KEY` and run `fathom probe`; live verified share is read from the audit log.

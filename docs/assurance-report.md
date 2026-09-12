@@ -16,6 +16,19 @@ Rungs follow `controls-evidence.md §5`. "Evidence" cites the ledger sequence or
 | 10 AI components: eval suite, injection, guardrails | in gate; 0 escapes; verified share ≥ 0.9 offline | bench: parser coverage 1.0, guard escapes 0, offline verified share 1.0, injection test pass, retrieval hit-rate 0.7786 (informational, D-008) | `metrics/card.md`; T-010/T-013 verdicts | pass (hit-rate below aspiration, disclosed) |
 | 11 Penetration test hook | n/a | not in scope for a prototype | — | not applicable |
 
+## M4 addendum — live data (2026-09-12, later the same day)
+
+| Rung | Target | Actual | Evidence | Status |
+|---|---|---|---|---|
+| 1 Tests | gate green, offline | recorded-fixture tests for `fathom/live` (HTTP cache/throttle, SEC client, prices, facts, materialize, wiring); gate run behind a dead proxy by every Verifier | T-018 … T-023 verdicts | pass |
+| 2 End to end | any US ticker in live mode | Orchestrator's real run: NFLX — 5 filings from EDGAR, every canonical section, Yahoo bars 2024-09-12 → 2026-09-11, XBRL snapshot, briefing 12/12 verified; T-021 network smoke: NFLX and COST cold materialize ≈ 2 s each | STATE task log; T-021 verdict | pass |
+| 3 SAST / secrets | zero | secrets scan clean; no personal e-mail in tracked files (Verifier grep); contact only in User-Agent at runtime | T-021 verdict | pass |
+| 6 Resilience | outages, malformed payloads | Yahoo → Stooq fallback; every malformed shape probed by four security rounds now maps to `SOURCE_HTTP` (T-022, T-023); fixture mode always available | T-022/T-023 security files | pass after T-023 v4 |
+| 9 Access | least privilege | ticker shape validated before any path or URL is built (`fullmatch`); cache path strictly inside `live_cache_dir` | T-020 security (attempt 3) | pass |
+| 10 AI components | unchanged | bench and eval remain on fixtures by design (NFR-013) | — | pass |
+
+Residual (accepted, LOW): `_stooq` guard covers `read_csv` but not the row loop (rows are pre-normalised); manifest with non-dict JSON in `quotes.py` (fallback constants); DPS "present but no frames" treated as absent; CLI `ask` empty-question min bound.
+
 ## NFR budget results
 
 | NFR | Budget | Result |
