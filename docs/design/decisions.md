@@ -52,3 +52,30 @@ verified share as a headline metric.
 Consequences: the prompt contract is a JSON schema (frozen in the LLD); the offline provider
 produces the same schema extractively so every surface and test runs without a key.
 Approver: Delivery lead (standing authorisation, D-000).
+
+## D-004 — Lexical BM25 over SEC items and chunks, no vector store   (2026-09-12, phase 2, status: accepted)
+Context: Retrieval must be explainable to a compliance reviewer, deterministic in CI, and free of
+model downloads; each ticker has five or six filings already structured into SEC items.
+Options: (a) embeddings + FAISS/Chroma; (b) `rank_bm25` dependency; (c) in-package BM25 (~60
+lines) over item-level sections and 1 200-character chunks.
+Decision: (c). `retrieval.search` is the single interface; a hybrid or embedding ranker can
+replace it later without touching callers (HLD §risks).
+Consequences: no new dependency; retrieval quality measured by the golden-query hit-rate in
+bench; documented upgrade path for large universes.
+Approver: Delivery lead (standing authorisation, D-000).
+
+## D-005 — Providers speak one JSON contract; the offline provider is a real provider   (2026-09-12, phase 2, status: accepted)
+Context: The demo must not depend on a key; CI must run the whole pipeline; live mode must be a
+one-variable switch.
+Options: (a) branch in `briefing.py` between "extractive" and "LLM" paths; (b) every provider
+implements `complete_json(system, user, max_tokens)` where `user` is a JSON document containing
+the task and the capped sections, so the offline provider composes the same output contract
+extractively from that document.
+Decision: (b). Portkey is called as OpenAI-compatible chat completions at
+`<PORTKEY_BASE_URL>/chat/completions` with header `x-portkey-api-key` and the catalogue model
+id (`max_tokens` mandatory); Anthropic via the Messages API. Both return the JSON text that
+`briefing.py` validates against the frozen schema.
+Consequences: one code path from prompt to verified claims; the offline output is verified by
+construction (quotes are the sentences themselves), which makes NFR-007's offline gate honest
+but not a measure of live quality — live verified share is reported from the audit log.
+Approver: Delivery lead (standing authorisation, D-000).

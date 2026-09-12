@@ -1,83 +1,66 @@
-# config/model-routing.yaml — build-time model routing for this project.
-# Owned by the client's platform team. Agents read it; they never edit it mid-build.
-# Model IDs below are EXAMPLES — replace with the client's approved catalogue.
-# Tier semantics are defined in references/model-routing.md.
+# config/model-routing.yaml — build-time model routing for Fathom.
+# Owner: Roshan Rana. Agents read it; they never edit it mid-build.
+# Owner override (2026-09-12): T3 for design/orchestration only; every implementation,
+# verification and security-review role runs at T2 (Claude Sonnet, effort high).
 
 version: 1
 project: "Fathom"
-approved_providers: [anthropic]        # or: [bedrock, vertex, azure, local]
-spend_ceiling_usd: 0                   # build-time AI ceiling from the problem brief; 0 = not set
+approved_providers: [anthropic]
+spend_ceiling_usd: 0            # not set; owner controls spend through tier pinning
 
 tiers:
   T0:
     kind: script
-    notes: "Deterministic. make check, scaffold, evidence, sbom, scanners."
+    notes: "Deterministic. scripts/check.py, fetch_data.py, evidence.py, secrets_scan.py, metrics/render.py."
   T1:
     kind: model
-    model: "claude-haiku-4-5-20251001"        # example; or a local vLLM instruct model
-    endpoint: null                             # e.g. http://vllm.internal:8000/v1 for local
+    model: "claude-haiku-4-5-20251001"
+    endpoint: null
     reasoning: off
     max_context_tokens: 16000
     temperature: 0.1
     may_see: [code, synthetic_data, docs]
+    notes: "Not on the critical path for this build; commit messages and ledger lines are scripted."
   T2:
     kind: model
-    model: "claude-sonnet-5"                   # example
+    model: "claude-sonnet-5"
     endpoint: null
-    reasoning: off                             # packs may set reasoning: on for complexity: high
-    max_context_tokens: 80000
+    reasoning: off               # effort: high in the Agent tool; packs with complexity: high may turn reasoning on
+    max_context_tokens: 100000
     temperature: 0.2
     may_see: [code, synthetic_data, docs]
   T3:
     kind: model
-    model: "claude-opus-5"                     # example; Fable/Mythos-class where approved
+    model: "claude-fable-5-1"
     endpoint: null
     reasoning: on
     reasoning_budget_tokens: 16000
-    max_context_tokens: 150000
-    temperature: 0.2
+    max_context_tokens: 200000
     may_see: [code, synthetic_data, docs, client_documents]
 
-# Default role → tier. Packs override tier per task; this is the fallback.
 roles:
-  orchestrator: T2
+  orchestrator: T3               # this session (owner override: orchestration stays with the design model)
   architect: T3
   planner: T3
   implementer:
-    template: T1
+    template: T2                 # owner override: no T1 implementers
     normal: T2
-    high: T2            # T3 if risk: high AND complexity: high
+    high: T2
   verifier:
-    low: T1             # only when validation is fully automated
+    low: T2
     medium: T2
-    high: T3
+    high: T2                     # owner override: no T3 verifiers
   security_reviewer:
-    low: T0             # scanners only
+    low: T0
     medium: T2
-    high: T3
-  evidence: T1
+    high: T2
+  evidence: T0
 
-# Cross-model verification for high-risk tasks (if the catalogue has >1 family)
-cross_model_verification:
-  enabled: false
-  verifier_model: null   # e.g. a second approved family
-
-# Escalation policy (see model-routing.md §5)
-escalation:
-  max_attempts_per_task: 2
-  escalate_on: [reasoning_bound]      # never: environment_bound
-  step: 1                              # tiers
-
-# Budgets by complexity (ceilings; packs may tighten, never loosen)
-budgets:
-  template: {input_tokens: 15000, tool_calls: 10, wall_clock_min: 10}
-  normal:   {input_tokens: 40000, tool_calls: 40, wall_clock_min: 45}
-  high:     {input_tokens: 80000, tool_calls: 80, wall_clock_min: 120}
-  verifier_ratio: 0.4
-  security_ratio: {medium: 0.25, high: 0.6}
-
-# Parallelism
+cross_model_verification: false  # single family available; independence comes from fresh contexts and pinned worktrees
 parallelism:
   max_implementers_per_wave: 3
-  ci_runners: 2
-  local_inference_batch: 4
+  verifiers_per_task: 1
+budgets:
+  normal:   {input_tokens: 40000, tool_calls: 40, wall_clock_min: 45}
+  high:     {input_tokens: 80000, tool_calls: 80, wall_clock_min: 120}
+  template: {input_tokens: 15000, tool_calls: 10, wall_clock_min: 10}
