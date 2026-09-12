@@ -1,6 +1,6 @@
 # Fathom bench
 
-_generated at 2026-09-12T15:48:55.099816+00:00_
+_generated at 2026-09-12T16:19:45.666205+00:00_
 
 | KPI | Value | Unit | Target | Status |
 |---|---|---|---|---|

@@ -1,4 +1,4 @@
-"""Tests for app/main.py (RTM: FR-012, NFR-011)."""
+"""Tests for app/main.py (RTM: FR-002, FR-006, FR-012, NFR-011)."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from streamlit.testing.v1 import AppTest
 
+from app.components.rendering import format_market_cap
 from fathom.config import DEFAULT_DISCLAIMER
 from fathom.guard import GUARD_NOTICE
 
@@ -39,7 +40,7 @@ def test_fr012_ac1_page_renders_core_elements_without_exception(
 
     assert not at.exception
     assert len(at.selectbox) > 0
-    assert len(at.metric) >= 5
+    assert len(at.metric) == 6
     assert len(at.get("plotly_chart")) == 1
     assert len(at.dataframe) >= 1
 
@@ -180,20 +181,23 @@ def test_fr012_ac6_no_computation_leaks_into_app() -> None:
 # --- NFR-011 ---------------------------------------------------------------------------------
 
 
-def test_nfr011_metrics_have_text_labels_and_as_of_captions(
+def test_nfr011_metrics_have_text_labels_and_source_caption(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     at = _run_app(monkeypatch, tmp_path)
     assert not at.exception
 
     metrics = at.metric
-    assert len(metrics) >= 5
+    assert len(metrics) == 6
     for metric in metrics:
         assert metric.label  # every metric carries a text label, not just a value
 
     caption_values = [c.value for c in at.caption]
-    as_of_captions = [c for c in caption_values if c.startswith("as of ")]
-    assert len(as_of_captions) >= 5
+    source_captions = [c for c in caption_values if c.startswith("Prices:")]
+    assert len(source_captions) == 1, "the source caption line is present exactly once (D-011)"
+    caption = source_captions[0]
+    assert "as of" in caption
+    assert "Snapshot:" in caption
 
 
 def test_nfr011_badge_state_is_carried_by_text_not_colour(
@@ -210,3 +214,29 @@ def test_nfr011_badge_state_is_carried_by_text_not_colour(
     for line in claim_lines:
         matches = [badge for badge in _KNOWN_BADGES if line.rstrip().endswith(badge)]
         assert len(matches) == 1, f"claim line must carry exactly one known badge: {line!r}"
+
+
+# --- FR-002: quote-card / market-cap formatting (D-011) --------------------------------------
+
+
+def test_fr002_format_market_cap_renders_trillions_billions_millions_and_none() -> None:
+    assert format_market_cap(4_849_208_188_600) == "$4.85 T"
+    assert format_market_cap(412_000_000_000) == "$412 B"
+    assert format_market_cap(95_000_000) == "$95 M"
+    assert format_market_cap(None) == "—"
+
+
+def test_fr002_ac6_page_metrics_render_untruncated_with_one_source_caption(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    at = _run_app(monkeypatch, tmp_path)
+    assert not at.exception
+
+    metrics = at.metric
+    assert len(metrics) == 6
+    for metric in metrics:
+        assert "…" not in metric.value
+
+    caption_values = [c.value for c in at.caption]
+    source_captions = [c for c in caption_values if c.startswith("Prices:")]
+    assert len(source_captions) == 1

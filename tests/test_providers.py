@@ -637,11 +637,15 @@ def test_fr010_offline_briefing_risks_skips_allcaps_and_tablerow_sentences() -> 
     assert _RISK_TABLEROW not in texts
 
 
-def test_fr010_offline_briefing_liquidity_prefers_cash_and_liquidity_sentences() -> None:
+def test_fr006_offline_briefing_liquidity_skips_sentences_already_claimed() -> None:
+    """D-011(c): liquidity shares its source excerpt with latest_results, so the first four
+    qualifying sentences (already claimed there) are not reused; only the remainder is left."""
     draft = _run_offline_briefing()
 
     texts = [c["text"] for c in draft["liquidity_capital"]]
-    assert texts == [_RESULTS_Q3_CASH, _RESULTS_Q4_LIQUIDITY, _RESULTS_Q5_CASH]
+    assert texts == [_RESULTS_Q5_CASH]
+    assert _RESULTS_Q3_CASH not in texts
+    assert _RESULTS_Q4_LIQUIDITY not in texts
 
 
 def test_fr010_offline_briefing_notable_disclosures_one_per_section() -> None:
@@ -674,6 +678,131 @@ def test_fr010_offline_briefing_every_claim_quote_is_substring_of_its_excerpt() 
             assert claim["quote"] in source_text
             if key != "talking_points":
                 assert claim["quote"] == claim["text"]
+
+
+# --- D-011: offline sentence heuristics (a)-(d) --------------------------------------------------
+
+
+def _run_offline_briefing_for(excerpt_text: str, section_id: str, form: str) -> dict[str, object]:
+    payload = {
+        "task": "briefing",
+        "ticker": "AAPL",
+        "company": "Apple Inc.",
+        "as_of": "2026-01-31",
+        "filings": [{"accession": "AC-1", "form": form, "filing_date": "2026-01-30"}],
+        "excerpts": [
+            {
+                "accession": "AC-1",
+                "section_id": section_id,
+                "title": "Section",
+                "text": excerpt_text,
+            }
+        ],
+    }
+    provider = OfflineProvider()
+    result = provider.complete_json(SYSTEM_BRIEFING, json.dumps(payload), 4000)
+    return json.loads(result.text)  # type: ignore[no-any-return]
+
+
+def test_fr006_offline_briefing_business_snapshot_drops_newline_heading_fragment() -> None:
+    """D-011(a): the heading glued before the first sentence is dropped at the last newline."""
+    real_sentence = (
+        "The Company designs, manufactures and markets smartphones and related services worldwide."
+    )
+    text = f"Business\nCompany Background\n{real_sentence}"
+
+    draft = _run_offline_briefing_for(text, "10-K:1", "10-K")
+
+    assert len(draft["business_snapshot"]) == 1
+    claim = draft["business_snapshot"][0]
+    assert claim["text"] == real_sentence
+    assert claim["quote"] == real_sentence
+    assert claim["quote"] in text
+
+
+def test_fr006_offline_briefing_latest_results_skips_boilerplate_sentences() -> None:
+    """D-011(b): forward-looking / safe-harbor boilerplate sentences never become claims."""
+    forward_looking = (
+        "This report contains forward-looking statements that involve substantial risks and "
+        "uncertainties about our future performance and plans."
+    )
+    safe_harbor = (
+        "These statements are made under the safe harbor provisions of the Private Securities "
+        "Litigation Reform Act of nineteen ninety five as amended."
+    )
+    conjunction = (
+        "This discussion should be read in conjunction with the condensed consolidated "
+        "financial statements and related notes included elsewhere in this report."
+    )
+    real_sentence = (
+        "Net sales increased 5% year over year driven by services growth in all segments."
+    )
+    text = " ".join([forward_looking, safe_harbor, conjunction, real_sentence])
+
+    draft = _run_offline_briefing_for(text, "10-Q:I.2", "10-Q")
+
+    assert draft["latest_results"][0]["text"] == real_sentence
+    texts = [c["text"] for c in draft["latest_results"]]
+    assert forward_looking not in texts
+    assert safe_harbor not in texts
+    assert conjunction not in texts
+
+
+def test_fr006_offline_briefing_risks_trims_item_prefix_glued_without_space() -> None:
+    """D-011(d): a leading 'Item N.'/'Item NA.' prefix is trimmed even with no following space."""
+    real_sentence = (
+        "Risk factors summarized here could materially affect the Company's future operating "
+        "results and financial condition."
+    )
+    text = f"Item 1A.{real_sentence}"
+
+    draft = _run_offline_briefing_for(text, "10-K:1A", "10-K")
+
+    assert len(draft["risks"]) == 1
+    claim = draft["risks"][0]
+    assert claim["text"] == real_sentence
+    assert not claim["text"].startswith("Item")
+    assert claim["quote"] in text
+
+
+def test_fr006_offline_briefing_notable_disclosures_dedupes_identical_legal_sentence() -> None:
+    """D-011(c): the same legal-proceedings sentence in 10-K:3 and the newest 10-Q:II.1 is not
+    claimed twice in notable_disclosures."""
+    shared_sentence = (
+        "The Company is involved in various legal proceedings arising in the ordinary course "
+        "of business that it does not believe are material."
+    )
+    payload = {
+        "task": "briefing",
+        "ticker": "AAPL",
+        "company": "Apple Inc.",
+        "as_of": "2026-01-31",
+        "filings": [
+            {"accession": "AC-10K", "form": "10-K", "filing_date": "2025-10-31"},
+            {"accession": "AC-10Q", "form": "10-Q", "filing_date": "2026-01-30"},
+        ],
+        "excerpts": [
+            {
+                "accession": "AC-10K",
+                "section_id": "10-K:3",
+                "title": "Legal Proceedings",
+                "text": shared_sentence,
+            },
+            {
+                "accession": "AC-10Q",
+                "section_id": "10-Q:II.1",
+                "title": "Legal Proceedings",
+                "text": shared_sentence,
+            },
+        ],
+    }
+    provider = OfflineProvider()
+
+    result = provider.complete_json(SYSTEM_BRIEFING, json.dumps(payload), 4000)
+    draft = json.loads(result.text)
+
+    matches = [c for c in draft["notable_disclosures"] if c["text"] == shared_sentence]
+    assert len(matches) == 1
 
 
 def test_fr010_offline_ask_returns_at_most_three_claims() -> None:

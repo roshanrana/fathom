@@ -58,3 +58,13 @@ must render untruncated at a 1440-px viewport (six metrics in one row).
 none
 
 ## Handoff (Implementer fills, ≤10 lines)
+Implemented D-011 (a)-(d) in `fathom/providers.py` offline section: `_trim_newline_tail`,
+`_trim_item_prefix`, `_is_boilerplate`, and a `used: set[str]` threaded through
+`_claims_from`/`_liquidity_claims` in section order (business→results→risks→liquidity→notable);
+talking points exempt. Added `format_market_cap` + one shared source caption in
+`app/components/rendering.py`; six `st.metric` in one row (removed per-metric captions).
+Updated `tests/test_providers.py` (5 new/changed `test_fr006_*`, incl. liquidity dedup) and
+`tests/test_app.py` (metric count→6, caption checks, new `test_fr002_*`). Metrics regenerated:
+claims_total 378→374 (verified_share stays 1.0). Full gate green except `bench drift`
+(git diff on metrics/headline.json vs last commit — expected since I never commit; card
+drift is clean). No Portkey/Anthropic/error-helper code touched.

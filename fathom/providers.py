@@ -267,6 +267,16 @@ def make_provider(settings: Settings, client: httpx.Client | None = None) -> Pro
 
 # --- Offline extractive algorithm (LLD §6.3) --------------------------------------------------
 
+_ITEM_PREFIX = re.compile(r"^Item\s+\d+[A-Za-z]?\.\s*", re.IGNORECASE)
+
+_BOILERPLATE_MARKERS = (
+    "forward-looking",
+    "private securities litigation reform act",
+    "this item and other sections",
+    "safe harbor",
+    "should be read in conjunction",
+)
+
 
 def _sentences(text: str) -> list[str]:
     return [s.strip() for s in _SENTENCE_SPLIT.split(text.strip()) if s.strip()]
@@ -285,8 +295,37 @@ def _qualifies(sentence: str) -> bool:
     return _numeric_token_count(sentence) < 4
 
 
+def _trim_newline_tail(sentence: str) -> str:
+    """D-011(a): a sentence with a newline keeps only the text after its last newline."""
+    if "\n" not in sentence:
+        return sentence
+    return sentence.rsplit("\n", 1)[-1].strip()
+
+
+def _trim_item_prefix(sentence: str) -> str:
+    """D-011(d): drop a leading 'Item N.' / 'Item NA.' section-heading prefix."""
+    return _ITEM_PREFIX.sub("", sentence, count=1)
+
+
+def _is_boilerplate(sentence: str) -> bool:
+    """D-011(b): case-insensitive forward-looking / safe-harbor boilerplate skip."""
+    lowered = sentence.lower()
+    return any(marker in lowered for marker in _BOILERPLATE_MARKERS)
+
+
+def _normalised_candidate(raw_sentence: str) -> str | None:
+    """Apply D-011 (a) and (d), then require the result still qualifies and passes (b)."""
+    sentence = _trim_item_prefix(_trim_newline_tail(raw_sentence))
+    if not _qualifies(sentence):
+        return None
+    if _is_boilerplate(sentence):
+        return None
+    return sentence
+
+
 def _qualifying_sentences(text: str) -> list[str]:
-    return [s for s in _sentences(text) if _qualifies(s)]
+    candidates = (_normalised_candidate(s) for s in _sentences(text))
+    return [s for s in candidates if s is not None]
 
 
 def _claim(excerpt: dict[str, Any], sentence: str) -> dict[str, Any]:
@@ -298,10 +337,23 @@ def _claim(excerpt: dict[str, Any], sentence: str) -> dict[str, Any]:
     }
 
 
-def _claims_from(excerpt: dict[str, Any] | None, limit: int) -> list[dict[str, Any]]:
+def _claims_from(
+    excerpt: dict[str, Any] | None, limit: int, used: set[str] | None = None
+) -> list[dict[str, Any]]:
+    """The first `limit` qualifying sentences of `excerpt`, skipping any already in `used`.
+
+    D-011(c): a sentence already claimed elsewhere in the briefing is not reused; whatever is
+    selected here is added to `used` in place. Pass `used=None` to opt out (e.g. `ask`, which
+    has no shared briefing-wide state).
+    """
     if excerpt is None:
         return []
-    sentences = _qualifying_sentences(excerpt["text"])[:limit]
+    candidates = _qualifying_sentences(excerpt["text"])
+    if used is not None:
+        candidates = [s for s in candidates if s not in used]
+    sentences = candidates[:limit]
+    if used is not None:
+        used.update(sentences)
     return [_claim(excerpt, sentence) for sentence in sentences]
 
 
@@ -322,16 +374,17 @@ def _excerpt_for_section(
     return candidates[0]
 
 
-def _liquidity_claims(excerpt: dict[str, Any] | None) -> list[dict[str, Any]]:
+def _liquidity_claims(excerpt: dict[str, Any] | None, used: set[str]) -> list[dict[str, Any]]:
+    """D-011(c) applies here too: candidates already claimed elsewhere are excluded first."""
     if excerpt is None:
         return []
-    qualifying = _qualifying_sentences(excerpt["text"])
+    qualifying = [s for s in _qualifying_sentences(excerpt["text"]) if s not in used]
     keyword_sentences = [s for s in qualifying if "liquidity" in s.lower() or "cash" in s.lower()][
         :3
     ]
-    if keyword_sentences:
-        return [_claim(excerpt, sentence) for sentence in keyword_sentences]
-    return [_claim(excerpt, sentence) for sentence in qualifying[:2]]
+    chosen = keyword_sentences if keyword_sentences else qualifying[:2]
+    used.update(chosen)
+    return [_claim(excerpt, sentence) for sentence in chosen]
 
 
 def _talking_points(
@@ -379,15 +432,23 @@ def _offline_briefing(payload: dict[str, Any]) -> dict[str, Any]:
     legal_10k = excerpt_for("10-K:3")
     legal_10q = excerpt_for("10-Q:II.1")
 
+    # D-011(c): one running set of already-claimed sentences, carried across sections in
+    # briefing order; talking points are exempt and may reuse an earlier claim's sentence.
+    used: set[str] = set()
+    business_snapshot = _claims_from(business, 3, used)
+    latest_results_claims = _claims_from(latest_results, 4, used)
+    risks_claims = _claims_from(risks, 4, used)
+    liquidity_claims = _liquidity_claims(liquidity_source, used)
+
     notable: list[dict[str, Any]] = []
     for excerpt in (cyber, legal_10k, legal_10q):
-        notable.extend(_claims_from(excerpt, 1))
+        notable.extend(_claims_from(excerpt, 1, used))
 
     return {
-        "business_snapshot": _claims_from(business, 3),
-        "latest_results": _claims_from(latest_results, 4),
-        "risks": _claims_from(risks, 4),
-        "liquidity_capital": _liquidity_claims(liquidity_source),
+        "business_snapshot": business_snapshot,
+        "latest_results": latest_results_claims,
+        "risks": risks_claims,
+        "liquidity_capital": liquidity_claims,
         "notable_disclosures": notable,
         "talking_points": _talking_points(
             [business, latest_results, risks, liquidity_source], filings_by_accession

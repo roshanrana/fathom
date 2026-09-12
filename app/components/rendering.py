@@ -27,6 +27,10 @@ BRIEFING_SECTIONS: tuple[tuple[str, str], ...] = (
 
 _UNKNOWN_FILING = "Source: unknown filing"
 
+_TRILLION = 1_000_000_000_000
+_BILLION = 1_000_000_000
+_MILLION = 1_000_000
+
 
 def render_header(firm: Company) -> None:
     """Company name, exchange, sector/industry, and a website link."""
@@ -35,18 +39,34 @@ def render_header(firm: Company) -> None:
     st.markdown(f"[{firm.website}]({firm.website})")
 
 
-def _as_of_caption(as_of: object, source: str | None) -> str:
-    if source is None:
-        return "as of - · -"
-    return f"as of {as_of} · {source}"
+def format_market_cap(value: float | None) -> str:
+    """Market cap as "$4.85 T" / "$412 B" / "$95 M" (D-011); "—" when unknown."""
+    if value is None:
+        return "—"
+    magnitude = abs(value)
+    if magnitude >= _TRILLION:
+        return f"${value / _TRILLION:.2f} T"
+    if magnitude >= _BILLION:
+        return f"${value / _BILLION:.0f} B"
+    if magnitude >= _MILLION:
+        return f"${value / _MILLION:.0f} M"
+    return f"${value:,.0f}"
+
+
+def _metrics_source_caption(quote: QuoteCard) -> str:
+    """The single 'Prices: ... · Snapshot: ...' caption placed under the metric row (D-011)."""
+    prices = f"Prices: {quote.source} as of {quote.as_of}"
+    if quote.snapshot_source is None or quote.snapshot_as_of is None:
+        snapshot = "Snapshot: —"
+    else:
+        snapshot_time = f"{quote.snapshot_as_of:%Y-%m-%d %H:%M}"
+        snapshot = f"Snapshot: {quote.snapshot_source} as of {snapshot_time} UTC"
+    return f"{prices} · {snapshot}"
 
 
 def render_quote_metrics(quote: QuoteCard) -> None:
-    """The five `st.metric` cards required by FR-012, each with an as-of caption."""
-    bars_caption = _as_of_caption(quote.as_of, quote.source)
-    snapshot_caption = _as_of_caption(quote.snapshot_as_of, quote.snapshot_source)
-
-    columns = st.columns(5)
+    """The six `st.metric` cards required by FR-012, plus one shared source caption (D-011)."""
+    columns = st.columns(6)
 
     with columns[0]:
         st.metric(
@@ -54,26 +74,25 @@ def render_quote_metrics(quote: QuoteCard) -> None:
             f"{quote.last_close:.2f}",
             f"{quote.change_abs:+.2f} ({quote.change_pct:+.2f}%)",
         )
-        st.caption(bars_caption)
 
     with columns[1]:
-        st.metric("52-week range", f"{quote.week52_low:.2f} - {quote.week52_high:.2f}")
-        st.caption(bars_caption)
+        st.metric("52-wk low", f"{quote.week52_low:.2f}")
 
     with columns[2]:
-        value = f"{quote.market_cap:,.0f}" if quote.market_cap is not None else "-"
-        st.metric("Market cap", value)
-        st.caption(snapshot_caption)
+        st.metric("52-wk high", f"{quote.week52_high:.2f}")
 
     with columns[3]:
-        value = f"{quote.pe:.2f}" if quote.pe is not None else "-"
-        st.metric("P/E", value)
-        st.caption(snapshot_caption)
+        st.metric("Market cap", format_market_cap(quote.market_cap))
 
     with columns[4]:
-        value = f"{quote.dividend_yield:.2f}%" if quote.dividend_yield is not None else "-"
+        value = f"{quote.pe:.2f}" if quote.pe is not None else "—"
+        st.metric("P/E", value)
+
+    with columns[5]:
+        value = f"{quote.dividend_yield:.2f}%" if quote.dividend_yield is not None else "—"
         st.metric("Dividend yield", value)
-        st.caption(snapshot_caption)
+
+    st.caption(_metrics_source_caption(quote))
 
 
 def render_chart(quote: QuoteCard) -> None:
