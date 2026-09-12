@@ -189,6 +189,6 @@ uv run python scripts/screenshots.py
 > Started `streamlit run app/main.py --server.port 8765 --server.headless true` as a subprocess
 > (`FATHOM_LLM_PROVIDER=offline`, `FATHOM_AUDIT_PATH` pointed at a temp file), waited for the
 > port, clicked "Generate briefing" and asked "What are the main risk factors?", then wrote
-> `docs/assets/00-full-page.png` (138 KB), `01-header-quote.png` (40 KB), `02-chart-filings.png`
-> (76 KB), `03-briefing.png` (415 KB), and `04-ask.png` (68 KB) at 1440 px wide, scale 1 — all
-> under the 600 KB limit. The streamlit subprocess was then killed.
+> `docs/assets/00-full-page.png`, `01-header-quote.png`, `02-chart-filings.png`, `03-briefing.png`
+> and `04-ask.png` at 1440 px wide, scale 1 — each under the 600 KB limit (exact sizes change on
+> every regeneration; `ls -l docs/assets` is the source of truth). The subprocess was then killed.
