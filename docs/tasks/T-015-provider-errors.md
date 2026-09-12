@@ -9,7 +9,7 @@ reasoning: off
 budget: {input_tokens: 40000, tool_calls: 40, wall_clock_min: 45}
 depends_on: [T-004, T-009]
 rtm: [FR-010, FR-013, NFR-002]
-status: todo
+status: done
 ---
 # T-015 — Provider transport and malformed-response errors; CLI guarded-claim rendering
 

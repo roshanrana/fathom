@@ -9,7 +9,7 @@ reasoning: off
 budget: {input_tokens: 40000, tool_calls: 40, wall_clock_min: 45}
 depends_on: [T-008, T-013]
 rtm: [FR-002, FR-006, FR-012, FR-015]
-status: todo
+status: done
 ---
 # T-016 — Demo polish: offline sentence heuristics, quote-card formatting
 
