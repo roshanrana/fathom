@@ -1,0 +1,10 @@
+.venv/
+.cache/
+.worktrees/
+graphify-out/
+htmlcov/
+node_modules/
+data/*.parquet
+uv.lock
+*.min.js
+.git/
