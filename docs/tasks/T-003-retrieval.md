@@ -64,3 +64,10 @@ single sentence longer than `size` becomes its own chunk (hard cut).
 none
 
 ## Handoff (Implementer fills, ≤10 lines)
+Implemented: pure-Python BM25 retrieval — tokenize/STOPWORDS, sentence-boundary chunk_section (hard-cut for over-long sentences, overlap-seeded continuation chunks), BM25Index (idf per LLD formula, score>0 filter, ties by doc_id asc), functools.cache'd index_for, module-level search. No new deps.
+Files changed: fathom/retrieval.py (new), tests/test_retrieval.py (new).
+Tests run: `uv run pytest tests/test_retrieval.py -q` → 11 passed. `uv run ruff check` and `uv run mypy fathom` → clean.
+Deviations: none from spec.
+Open questions: none.
+Full gate (`uv run python scripts/check.py`): fails only on `ruff format --check` for fathom/guard.py (pre-existing, out of my scope — owned by the concurrent contracts/guard/audit implementer). All checks touching my two files are green.
+Budget actual: ~30 tool calls, well under 40k input tokens / 45 min.
