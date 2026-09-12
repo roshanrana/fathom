@@ -55,3 +55,13 @@ treated as missing.
 B6 — fresh Security Reviewer at T2 confirms closure of T-019 F1–F5.
 
 ## Handoff (Implementer fills, ≤10 lines)
+Closed F1-F5, signatures unchanged. F1/F2: guard (Type/Value/Key/Index/JSONDecode)Error around
+Yahoo JSON parse + Stooq `read_csv`; per-row drop on bad Stooq cell; 0 rows -> SOURCE_HTTP
+"malformed response"; Stooq capped `nrows=10_000`. F3: ticker/cik regex checks before any
+request (UNKNOWN_TICKER / SOURCE_HTTP "invalid identifier"). F4: `math.isfinite` in
+`_numeric_val` + `_finite_or_none` on final ratios. F5: per-concept bounds (shares/equity/eps/
+dps) threaded into `_latest_value`/`_ttm_sum`. Added ~14 tests covering AC1-AC4.
+Targeted: 30/30 pass; scoped 4 files clean on ruff check/format + mypy strict. Full
+`scripts/check.py` stops at `ruff format --check` on pre-existing unformatted app/main.py,
+fathom/cli.py, fathom/live/build.py, fathom/quotes.py (untouched by me, concurrent work) —
+mypy/pytest steps never reached.

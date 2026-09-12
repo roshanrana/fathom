@@ -13,7 +13,9 @@ are skipped rather than raising.
 
 from __future__ import annotations
 
+import math
 import re
+from collections.abc import Callable
 from datetime import date, datetime
 
 from fathom.errors import Code, FathomError
@@ -23,8 +25,31 @@ _QUARTERLY_FRAME_RE = re.compile(r"^CY\d{4}Q\d$")
 _INSTANT_FRAME_RE = re.compile(r"^CY\d{4}Q\dI$")
 _TTM_QUARTER_COUNT = 4
 _ROUND_DP = 2
+_CIK_RE = re.compile(r"^\d{10}$")
+
+# T-023/T-019 F5: out-of-range facts are treated as missing.
+_SHARES_MAX = 1e12
+_EQUITY_ABS_MAX = 1e13
+_EPS_ABS_MAX = 1e4
+_DPS_MAX = 1e3
 
 SNAPSHOT_SOURCE = "SEC XBRL companyconcept (shares, EPS TTM, equity, DPS TTM)"
+
+
+def _within_shares_bounds(value: float) -> bool:
+    return 0.0 < value <= _SHARES_MAX
+
+
+def _within_equity_bounds(value: float) -> bool:
+    return abs(value) <= _EQUITY_ABS_MAX
+
+
+def _within_eps_bounds(value: float) -> bool:
+    return abs(value) <= _EPS_ABS_MAX
+
+
+def _within_dps_bounds(value: float) -> bool:
+    return 0.0 <= value <= _DPS_MAX
 
 
 def snapshot(
@@ -35,25 +60,36 @@ def snapshot(
     `quote_time` is accepted for provenance/signature symmetry with the rest of the live
     pipeline; the derivation itself only depends on the facts and `last_close`. Never raises:
     a concept that cannot be fetched (`SOURCE_HTTP`, e.g. 404) leaves the fields that depend on
-    it as `None` (dividend TTM instead defaults to 0, per the frozen formula).
+    it as `None` (dividend TTM instead defaults to 0, per the frozen formula). Raises
+    `SOURCE_HTTP` reason "invalid identifier" before any request if `cik` is not a 10-digit
+    string (T-019 F3).
     """
     del quote_time
+    if not _CIK_RE.match(cik):
+        raise FathomError(
+            Code.SOURCE_HTTP,
+            "invalid cik supplied to snapshot",
+            {"source": "sec", "status": 0, "reason": "invalid identifier"},
+        )
 
     shares_payload = _fetch_concept(sec, cik, "dei", "EntityCommonStockSharesOutstanding")
-    shares = _latest_value(_entries(shares_payload))
+    shares = _latest_value(_entries(shares_payload), is_valid=_within_shares_bounds)
     eps_ttm = _ttm_sum(
         _entries(_fetch_concept(sec, cik, "us-gaap", "EarningsPerShareDiluted")),
         _QUARTERLY_FRAME_RE,
+        is_valid=_within_eps_bounds,
     )
     equity = _latest_value(
         _matching(
             _entries(_fetch_concept(sec, cik, "us-gaap", "StockholdersEquity")),
             _INSTANT_FRAME_RE,
-        )
+        ),
+        is_valid=_within_equity_bounds,
     )
     dps_ttm = _ttm_sum(
         _entries(_fetch_concept(sec, cik, "us-gaap", "CommonStockDividendsPerShareDeclared")),
         _QUARTERLY_FRAME_RE,
+        is_valid=_within_dps_bounds,
     )
     if dps_ttm is None:
         dps_ttm = 0.0
@@ -68,12 +104,21 @@ def snapshot(
     dividend_yield = round(dps_ttm / last_close * 100, _ROUND_DP) if last_close != 0 else None
 
     return {
-        "market_cap": round(market_cap, _ROUND_DP) if market_cap is not None else None,
-        "pe": pe,
-        "pb": pb,
-        "dividend_yield": dividend_yield,
+        "market_cap": _finite_or_none(
+            round(market_cap, _ROUND_DP) if market_cap is not None else None
+        ),
+        "pe": _finite_or_none(pe),
+        "pb": _finite_or_none(pb),
+        "dividend_yield": _finite_or_none(dividend_yield),
         "snapshot_source": SNAPSHOT_SOURCE,
     }
+
+
+def _finite_or_none(value: float | None) -> float | None:
+    """Belt-and-suspenders: never surface a non-finite derived ratio (T-019 F4)."""
+    if value is None or not math.isfinite(value):
+        return None
+    return value
 
 
 def _fetch_concept(
@@ -110,11 +155,18 @@ def _matching(
     ]
 
 
-def _numeric_val(entry: dict[str, object]) -> float | None:
+def _numeric_val(
+    entry: dict[str, object], *, is_valid: Callable[[float], bool] | None = None
+) -> float | None:
     val = entry.get("val")
     if isinstance(val, bool) or not isinstance(val, int | float):
         return None
-    return float(val)
+    value = float(val)
+    if not math.isfinite(value):
+        return None
+    if is_valid is not None and not is_valid(value):
+        return None
+    return value
 
 
 def _end_date(entry: dict[str, object]) -> date | None:
@@ -133,19 +185,30 @@ def _sorted_by_end_desc(entries: list[dict[str, object]]) -> list[dict[str, obje
     return [entry for entry, _ in dated]
 
 
-def _latest_value(entries: list[dict[str, object]]) -> float | None:
+def _latest_value(
+    entries: list[dict[str, object]], *, is_valid: Callable[[float], bool] | None = None
+) -> float | None:
     for entry in _sorted_by_end_desc(entries):
-        val = _numeric_val(entry)
+        val = _numeric_val(entry, is_valid=is_valid)
         if val is not None:
             return val
     return None
 
 
-def _ttm_sum(entries: list[dict[str, object]], pattern: re.Pattern[str]) -> float | None:
-    """Sum of the 4 most recent numeric entries matching `pattern`; `None` if none qualify."""
+def _ttm_sum(
+    entries: list[dict[str, object]],
+    pattern: re.Pattern[str],
+    *,
+    is_valid: Callable[[float], bool] | None = None,
+) -> float | None:
+    """Sum of the 4 most recent numeric entries matching `pattern`; `None` if none qualify.
+
+    An entry failing `is_valid` (out-of-range magnitude, T-019 F5) is treated as missing and
+    skipped, same as a non-numeric `val`.
+    """
     values: list[float] = []
     for entry in _sorted_by_end_desc(_matching(entries, pattern)):
-        val = _numeric_val(entry)
+        val = _numeric_val(entry, is_valid=is_valid)
         if val is None:
             continue
         values.append(val)

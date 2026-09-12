@@ -10,6 +10,7 @@ from pathlib import Path
 import httpx
 import pytest
 
+from fathom.errors import Code, FathomError
 from fathom.live.facts import SNAPSHOT_SOURCE, snapshot
 from fathom.live.http import LiveHttp
 from fathom.live.sec import SecClient
@@ -169,6 +170,96 @@ def test_fr023_fuzz_odd_fact_shapes_never_raise(tmp_path: Path) -> None:
     assert result["pb"] is None
     assert result["dividend_yield"] == 0.0
     assert result["snapshot_source"] == SNAPSHOT_SOURCE
+
+
+def test_fr023_invalid_cik_raises_source_http_before_any_request(tmp_path: Path) -> None:
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url))
+        return httpx.Response(404, content=b"not found")
+
+    sec = _make_sec(tmp_path, handler)
+
+    with pytest.raises(FathomError) as excinfo:
+        snapshot(sec, "12", last_close=_LAST_CLOSE, quote_time=_QUOTE_TIME)
+
+    err = excinfo.value
+    assert err.code == Code.SOURCE_HTTP
+    assert err.details == {"source": "sec", "status": 0, "reason": "invalid identifier"}
+    assert calls == []
+
+
+def test_fr023_nan_and_infinity_literals_yield_none_and_json_serialisable(
+    tmp_path: Path,
+) -> None:
+    nan_shares = json.dumps(
+        {
+            "units": {
+                "shares": [{"end": "2026-07-17", "val": float("nan"), "frame": None}],
+            }
+        },
+        allow_nan=True,
+    ).encode()
+    inf_equity = json.dumps(
+        {
+            "units": {
+                "USD": [{"end": "2026-06-27", "val": float("inf"), "frame": "CY2026Q2I"}],
+            }
+        },
+        allow_nan=True,
+    ).encode()
+
+    sec = _make_sec(
+        tmp_path,
+        _concept_handler(
+            {
+                "EntityCommonStockSharesOutstanding": nan_shares,
+                "StockholdersEquity": inf_equity,
+            }
+        ),
+    )
+
+    result = snapshot(sec, _CIK, last_close=_LAST_CLOSE, quote_time=_QUOTE_TIME)
+
+    assert result["market_cap"] is None
+    assert result["pb"] is None
+    # Every field must be finite/None so strict JSON serialisation never fails.
+    json.dumps(result, allow_nan=False)
+
+
+def test_fr023_out_of_range_facts_are_treated_as_missing(tmp_path: Path) -> None:
+    huge_shares = json.dumps(
+        {"units": {"shares": [{"end": "2026-07-17", "val": 1e13, "frame": None}]}}
+    ).encode()
+    huge_equity = json.dumps(
+        {"units": {"USD": [{"end": "2026-06-27", "val": 2e13, "frame": "CY2026Q2I"}]}}
+    ).encode()
+    huge_eps = json.dumps(
+        {"units": {"USD/shares": [{"end": "2026-06-27", "val": 1e5, "frame": "CY2026Q2"}]}}
+    ).encode()
+    huge_dps = json.dumps(
+        {"units": {"USD/shares": [{"end": "2026-06-27", "val": 1e4, "frame": "CY2026Q2"}]}}
+    ).encode()
+
+    sec = _make_sec(
+        tmp_path,
+        _concept_handler(
+            {
+                "EntityCommonStockSharesOutstanding": huge_shares,
+                "StockholdersEquity": huge_equity,
+                "EarningsPerShareDiluted": huge_eps,
+                "CommonStockDividendsPerShareDeclared": huge_dps,
+            }
+        ),
+    )
+
+    result = snapshot(sec, _CIK, last_close=_LAST_CLOSE, quote_time=_QUOTE_TIME)
+
+    assert result["market_cap"] is None
+    assert result["pb"] is None
+    assert result["pe"] is None
+    assert result["dividend_yield"] == 0.0
 
 
 def test_fr023_zero_last_close_does_not_raise(tmp_path: Path) -> None:

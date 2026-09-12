@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import io
 import json
+import math
+import re
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Literal, cast
@@ -28,6 +30,11 @@ _STOOQ_HEADER = "Date,Open,High,Low,Close,Volume"
 _BARS_TTL_HOURS = 6.0
 _BAR_COLUMNS = ["symbol", "date", "open", "high", "low", "close", "volume"]
 _FLOAT_COLUMNS = ("open", "high", "low", "close", "volume")
+_MAX_STOOQ_ROWS = 10_000
+_TICKER_RE = re.compile(r"^[A-Z0-9.\-]{1,10}$")
+# T-023/T-019 F1, F2: any of these raised while parsing a Yahoo/Stooq body is a source failure
+# (triggers the other source's fallback), never an uncaught exception.
+_PARSE_GUARD_EXCEPTIONS = (TypeError, ValueError, KeyError, IndexError, json.JSONDecodeError)
 
 PriceSource = Literal["yahoo", "stooq"]
 
@@ -54,9 +61,12 @@ class PriceClient:
         """Ascending daily bars for `ticker`, trying `primary` first with an automatic fallback.
 
         Sets `last_source` to whichever source actually served the bars. Raises the fallback
-        source's `SOURCE_HTTP` if both sources fail.
+        source's `SOURCE_HTTP` if both sources fail. Raises `UNKNOWN_TICKER` before any request
+        if `ticker` does not match the safe identifier pattern (T-019 F3).
         """
         symbol = ticker.upper()
+        if not _TICKER_RE.match(symbol):
+            raise FathomError(Code.UNKNOWN_TICKER, f"invalid ticker {symbol!r}", {"ticker": symbol})
         fallback: PriceSource = "stooq" if self._primary == "yahoo" else "yahoo"
         fetchers: dict[PriceSource, Callable[[str], pd.DataFrame]] = {
             "yahoo": self._yahoo,
@@ -80,13 +90,12 @@ class PriceClient:
         try:
             payload = json.loads(body)
             result = cast(dict[str, object], payload["chart"]["result"][0])
-        except (json.JSONDecodeError, KeyError, IndexError, TypeError) as exc:
-            raise FathomError(
-                Code.SOURCE_HTTP,
-                "yahoo response missing chart.result",
-                {"source": "yahoo", "status": 200, "reason": "malformed body"},
-            ) from exc
-        return self._bars_from_yahoo(ticker, result)
+            frame = self._bars_from_yahoo(ticker, result)
+        except _PARSE_GUARD_EXCEPTIONS as exc:
+            raise _malformed_response_error("yahoo") from exc
+        if frame.empty:
+            raise _malformed_response_error("yahoo")
+        return frame
 
     def _bars_from_yahoo(self, ticker: str, result: dict[str, object]) -> pd.DataFrame:
         timestamps = cast(list[int], result.get("timestamp") or [])
@@ -102,7 +111,8 @@ class PriceClient:
         rows: list[dict[str, object]] = []
         for i, ts in enumerate(timestamps):
             close = closes[i] if i < len(closes) else None
-            if close is None:
+            close_value = _valid_close(close)
+            if close_value is None:
                 continue
             rows.append(
                 {
@@ -111,7 +121,7 @@ class PriceClient:
                     "open": _safe_float(opens, i),
                     "high": _safe_float(highs, i),
                     "low": _safe_float(lows, i),
-                    "close": float(cast(float, close)),
+                    "close": close_value,
                     "volume": _safe_float(volumes, i),
                 }
             )
@@ -128,30 +138,82 @@ class PriceClient:
                 {"source": "stooq", "status": 200, "reason": "not a CSV body"},
             )
 
+        try:
+            csv_frame = pd.read_csv(io.StringIO(text), nrows=_MAX_STOOQ_ROWS)
+        except _PARSE_GUARD_EXCEPTIONS as exc:
+            raise _malformed_response_error("stooq") from exc
+
         rows: list[dict[str, object]] = []
-        csv_frame = pd.read_csv(io.StringIO(text))
         for _, row in csv_frame.iterrows():
-            close = row["Close"]
-            if pd.isna(close):
-                continue
-            rows.append(
-                {
-                    "symbol": ticker,
-                    "date": datetime.strptime(str(row["Date"]), "%Y-%m-%d").date(),
-                    "open": float(row["Open"]),
-                    "high": float(row["High"]),
-                    "low": float(row["Low"]),
-                    "close": float(close),
-                    "volume": float(row["Volume"]),
-                }
-            )
-        return _bars_frame(rows)
+            parsed = _parse_stooq_row(ticker, row)
+            if parsed is not None:
+                rows.append(parsed)
+
+        frame = _bars_frame(rows)
+        if frame.empty:
+            raise _malformed_response_error("stooq")
+        return frame
+
+
+def _malformed_response_error(source: str) -> FathomError:
+    """SOURCE_HTTP for a body that raised while parsing, or parsed into zero valid bars."""
+    return FathomError(
+        Code.SOURCE_HTTP,
+        f"{source} response could not be parsed into valid bars",
+        {"source": source, "status": 200, "reason": "malformed response"},
+    )
+
+
+def _valid_close(value: object) -> float | None:
+    """A close is usable only if it is a finite, positive number (T-019 F1)."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        numeric = float(cast(float, value))
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(numeric) or numeric <= 0:
+        return None
+    return numeric
 
 
 def _safe_float(values: list[object], index: int) -> float:
-    if index >= len(values) or values[index] is None:
+    """Best-effort float for a Yahoo non-close OHLCV cell; unusable values become NaN."""
+    if index >= len(values):
         return float("nan")
-    return float(cast(float, values[index]))
+    value = values[index]
+    if value is None or isinstance(value, bool):
+        return float("nan")
+    try:
+        return float(cast(float, value))
+    except (TypeError, ValueError):
+        return float("nan")
+
+
+def _parse_stooq_row(ticker: str, row: pd.Series) -> dict[str, object] | None:
+    """Parse one Stooq CSV row; any unparsable cell drops the whole row (T-019 F2)."""
+    try:
+        close_value = _valid_close(row["Close"])
+        if close_value is None:
+            return None
+        return {
+            "symbol": ticker,
+            "date": datetime.strptime(str(row["Date"]), "%Y-%m-%d").date(),
+            "open": _required_float(row["Open"]),
+            "high": _required_float(row["High"]),
+            "low": _required_float(row["Low"]),
+            "close": close_value,
+            "volume": _required_float(row["Volume"]),
+        }
+    except _PARSE_GUARD_EXCEPTIONS:
+        return None
+
+
+def _required_float(value: object) -> float:
+    """Strict float conversion for a Stooq cell; raises on anything unparsable."""
+    if value is None or isinstance(value, bool):
+        raise TypeError("not a valid numeric cell")
+    return float(cast(float, value))
 
 
 def _bars_frame(rows: list[dict[str, object]]) -> pd.DataFrame:

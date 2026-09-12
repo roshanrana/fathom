@@ -11,7 +11,7 @@ import pytest
 
 from fathom.errors import Code, FathomError
 from fathom.live.http import LiveHttp
-from fathom.live.prices import PriceClient
+from fathom.live.prices import _STOOQ_HEADER, PriceClient
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "live"
 
@@ -189,6 +189,131 @@ def test_nfr013_daily_bars_cached_second_call_zero_transport_calls(tmp_path: Pat
     assert calls_after_first == 1
     assert calls_after_second == calls_after_first
     assert first["close"].tolist() == second["close"].tolist()
+
+
+def test_fr022_daily_bars_invalid_ticker_raises_unknown_ticker_before_request(
+    tmp_path: Path,
+) -> None:
+    client, calls = _make_client(tmp_path)
+
+    with pytest.raises(FathomError) as excinfo:
+        client.daily_bars("bad ticker!")
+
+    assert excinfo.value.code == Code.UNKNOWN_TICKER
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        pytest.param(
+            b'{"chart": {"result": [{"timestamp": [null, 1700086400], '
+            b'"indicators": {"quote": [{"open": [1.0, 2.0], "high": [1.5, 2.5], '
+            b'"low": [0.5, 1.5], "close": [1.1, 2.2], "volume": [100, 200]}]}}]}}',
+            id="null-timestamp-entry",
+        ),
+        pytest.param(
+            b'{"chart": {"result": [{"timestamp": [1700000000], '
+            b'"indicators": {"quote": [{"open": ["x"], "high": ["x"], '
+            b'"low": ["x"], "close": ["not-a-number"], "volume": ["x"]}]}}]}}',
+            id="string-ohlcv-values",
+        ),
+        pytest.param(
+            b'{"chart": {"result": [{"timestamp": [1700000000, 1700086400], '
+            b'"indicators": {"quote": [{"open": [1.0, 2.0], "high": [1.5, 2.5], '
+            b'"low": [0.5, 1.5], "close": [], "volume": [100, 200]}]}}]}}',
+            id="mismatched-array-lengths",
+        ),
+        pytest.param(b'{"chart": {"result": null}}', id="null-result"),
+    ],
+)
+def test_fr022_yahoo_malformed_bodies_fall_back_to_stooq(tmp_path: Path, body: bytes) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url).startswith(_YAHOO_HOST):
+            return httpx.Response(200, content=body)
+        return _stooq_ok(request)
+
+    client, calls = _make_client(tmp_path, handler)
+
+    frame = client.daily_bars("AAPL")
+
+    assert client.last_source == "stooq"
+    assert any(str(c.url).startswith(_STOOQ_HOST) for c in calls)
+    assert len(frame) == 30
+
+
+def test_fr022_yahoo_and_stooq_both_malformed_raises_malformed_response_no_body(
+    tmp_path: Path,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url).startswith(_YAHOO_HOST):
+            return httpx.Response(200, content=b'{"chart": {"result": null}}')
+        return httpx.Response(200, content=b"Date,Open,High,Low,Close,Volume\nnotadate,x,x,x,x,x\n")
+
+    client, _ = _make_client(tmp_path, handler)
+
+    with pytest.raises(FathomError) as excinfo:
+        client.daily_bars("AAPL")
+
+    err = excinfo.value
+    assert err.code == Code.SOURCE_HTTP
+    assert err.details == {"source": "stooq", "status": 200, "reason": "malformed response"}
+    assert "notadate" not in str(err.details)
+    assert "notadate" not in err.message
+
+
+def test_fr022_stooq_csv_20000_rows_yields_at_most_10000_bars(tmp_path: Path) -> None:
+    lines = [_STOOQ_HEADER]
+    base = dt.date(2020, 1, 1)
+    for i in range(20_000):
+        day = base + dt.timedelta(days=i)
+        price = 1.0 + (i % 100) * 0.01
+        lines.append(f"{day.isoformat()},{price},{price},{price},{price},100")
+    csv_body = ("\n".join(lines) + "\n").encode()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=csv_body)
+
+    client, _ = _make_client(tmp_path, handler, primary="stooq")
+
+    frame = client.daily_bars("AAPL")
+
+    assert len(frame) <= 10_000
+
+
+def test_fr022_stooq_non_numeric_cell_drops_only_that_row(tmp_path: Path) -> None:
+    csv_body = (
+        f"{_STOOQ_HEADER}\n"
+        "2024-01-01,1.0,1.5,0.5,1.2,100\n"
+        "2024-01-02,bad,1.6,0.6,1.3,200\n"
+        "2024-01-03,1.1,1.6,0.6,1.4,300\n"
+    ).encode()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=csv_body)
+
+    client, _ = _make_client(tmp_path, handler, primary="stooq")
+
+    frame = client.daily_bars("AAPL")
+
+    assert len(frame) == 2
+    assert dt.date(2024, 1, 2) not in list(frame["date"])
+
+
+def test_fr022_stooq_all_garbage_csv_is_source_failure(tmp_path: Path) -> None:
+    csv_body = (f"{_STOOQ_HEADER}\nbad,bad,bad,bad,bad,bad\nalso-bad,x,x,x,x,x\n").encode()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=csv_body)
+
+    client, _ = _make_client(tmp_path, handler, primary="stooq")
+
+    with pytest.raises(FathomError) as excinfo:
+        client.daily_bars("AAPL")
+
+    err = excinfo.value
+    assert err.code == Code.SOURCE_HTTP
+    assert err.details["reason"] == "malformed response"
 
 
 def test_fr022_yahoo_drops_rows_with_null_close(tmp_path: Path) -> None:
