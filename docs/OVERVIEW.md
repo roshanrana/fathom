@@ -96,6 +96,7 @@ hand-checkable anchor values: [`data/SOURCES.md`](../data/SOURCES.md).
 | `data/bars.parquet` | `AlphaDojo/dojo_stock_kline` | Apache-2.0 | 8480 | Daily OHLCV bars, US/CN/HK equities |
 | `data/quotes.parquet` | `AlphaDojo/dojo_quote` | Apache-2.0 | 20 | Latest-session quote snapshots: price, change, volume, market cap, valuation ratios |
 | `data/companies.parquet` | `AlphaDojo/dojo_stock_info` | Apache-2.0 | 20 | Company master: names, exchange, sector, industry, website |
+| `.cache/live/<TICKER>/*.parquet` | SEC EDGAR (official) + Yahoo Finance chart / Stooq CSV (unofficial) | public data, no redistribution licence needed | 1 ticker per cache dir | Live mode only (`FATHOM_DATA_SOURCE=live`, T-021, `docs/design/05-m4-live-data.md`): any US-listed ticker, materialized on demand into the same four fixture-shaped tables |
 
 Filings span 2025-04-23 to 2026-05-29 (20 10-K, 77 10-Q); bars run 2025-01-02 to 2026-09-11; the
 quote snapshot's `quote_time` maxes at 2026-09-11T16:00:01+00:00. Dataset text and rows are public

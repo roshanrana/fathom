@@ -49,3 +49,17 @@ on the live cache and asserts `verified_share == 1.0`.
 none (docs) — B6 row added to the threat model.
 
 ## Handoff (Implementer fills, ≤10 lines)
+
+Added `tests/test_live_network.py` (skips w/o env), README "Live data (free, no API keys)",
+OVERVIEW/ASSUMPTIONS/SHOWCASE/runbook/demo-checklist live sections, threat-model B6 rows (4 rows,
+`02-threat-model.md`). Commands run, output quoted in docs/here: `PYTHONIOENCODING=utf-8 uv run
+pytest tests/test_live_network.py -q` (2 skipped, no env); `FATHOM_NETWORK_TESTS=1
+FATHOM_SEC_CONTACT=<contact> uv run pytest tests/test_live_network.py -q -s` → 2
+passed, **NFLX 2.58s, COST 2.38s** cold materialize; `FATHOM_DATA_SOURCE=live
+FATHOM_SEC_CONTACT=... FATHOM_AUDIT_PATH=.cache/live/_audit.jsonl uv run fathom fetch NFLX
+--force` → all 5 filings full canonical coverage, bars 2024-09-12..2026-09-11, snapshot 4/4
+fields (pasted verbatim in SHOWCASE.md §9); `uv run fathom brief NFLX` (offline provider, live
+cache) → all claims `[verified]`; `uv run python scripts/check.py` → 420 passed/2 skipped,
+96%+ coverage, all checks passed. `scripts/screenshots.py` doesn't support switching to the live
+sidebar radio without edits — skipped per pack note, stated in SHOWCASE.md §9. Contact email
+used only via env var at runtime; grepped repo, confirmed not in any tracked file.

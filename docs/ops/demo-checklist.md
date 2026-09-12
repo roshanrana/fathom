@@ -34,7 +34,24 @@
 - **What would the pilot need?** Full EDGAR universe and a live quote feed; SSO in front of the API; tamper-evident audit sink; an advisor eval set built with compliance; retrieval hit-rate above 0.9.
 - **Cost?** One gateway call per briefing, capped at ≈ 30 k input tokens by section caps; per-call token counts land in the audit log.
 
+## Live data mode (optional extra beat, T-021)
+
+If asked "does this only work on the 20 demo tickers?": show live mode.
+
+```
+$env:FATHOM_DATA_SOURCE="live"; $env:FATHOM_SEC_CONTACT="<contact>"
+uv run fathom fetch NFLX --force
+```
+
+prints filing/bars/snapshot coverage fetched live from SEC EDGAR + Yahoo for a ticker outside
+the fixture universe (`docs/SHOWCASE.md` §9 has a real run's output). Say: "SEC EDGAR is the
+official source; prices come from Yahoo's chart endpoint with Stooq as a fallback — both
+unofficial and can change, which is why the fixture set is what the gate and CI run against."
+Fall back instantly with `$env:FATHOM_DATA_SOURCE="fixture"` (or omit `--source live` on any
+command) if the network is unavailable during the demo.
+
 ## If something fails
 
 - Live call fails → `error PROVIDER_*` on screen; say "this is the runbook path", switch the sidebar/env to offline, continue.
+- Live *data* fetch fails → `error SOURCE_*` on screen; say "unofficial endpoints, fixture mode is the fallback", set `FATHOM_DATA_SOURCE=fixture` (or `--source fixture`), continue on AAPL.
 - Streamlit hiccup → `uv run fathom brief AAPL` in the terminal shows the same briefing as text.

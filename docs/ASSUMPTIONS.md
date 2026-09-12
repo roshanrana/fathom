@@ -53,6 +53,21 @@ Anyone reading the metrics card should read "verified_share: 1.0" as "the offlin
 end to end," not as "citations are always this reliable" — that second claim is only true for the
 offline provider, by construction, and is explicitly not asserted for live mode.
 
+## Live mode caveats (T-021, `docs/design/05-m4-live-data.md`)
+
+- **Yahoo Finance and Stooq are unofficial, undocumented endpoints** and may change shape or
+  block requests without notice — Stooq returned a bot-challenge HTML page (not price data)
+  during our own probes while building this task, which is exactly the failure the Yahoo-first,
+  Stooq-fallback design and the `SOURCE_HTTP` error path exist for. SEC EDGAR is the one official
+  source used (submissions API, primary documents, XBRL company-concept facts), gated by its
+  fair-access policy (contact in `User-Agent`, requests throttled to ≤ 8/s against its 10/s cap).
+- **XBRL-derived valuation ratios (market cap, P/E, P/B, dividend yield) are approximations**,
+  computed in-process from SEC XBRL facts and the latest close — not a vendor's own calculation,
+  and not directly comparable to a terminal's reported figures for the same ticker.
+- **Cache TTL is 6 hours** (`FATHOM_LIVE_TTL_HOURS`) under `.cache/live/<TICKER>/`; a read inside
+  the TTL window costs zero HTTP calls. `fathom fetch TICKER --force` bypasses the TTL. Owner:
+  Roshan Rana. Surfaces: README "Live data (free, no API keys)", `docs/ops/runbook.md`.
+
 ## Other assumptions made during the build
 
 - **Golden-query retrieval hit rate target is informational, not gated** (decision D-008): BM25

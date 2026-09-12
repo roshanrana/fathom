@@ -72,6 +72,46 @@ built. `FATHOM_LLM_PROVIDER=anthropic` with `ANTHROPIC_API_KEY` talks to the Ant
 API directly as a second live path. Every call — offline, Portkey or Anthropic — is written to
 the audit log.
 
+## Live data (free, no API keys)
+
+Separately from the LLM provider above, Fathom's *data* source (filings, prices, valuation
+snapshot) is a one-variable switch, `FATHOM_DATA_SOURCE` (default `fixture`, the committed
+20-ticker dataset). Live mode fetches any US-listed ticker known to SEC EDGAR from free,
+unofficial-to-unofficial-and-official sources — no API key required:
+
+```bash
+export FATHOM_DATA_SOURCE=live
+export FATHOM_SEC_CONTACT=<your.name@example.com>   # required in live mode (SEC fair-access policy)
+# export FATHOM_LIVE_CACHE_DIR=.cache/live          # default
+# export FATHOM_LIVE_TTL_HOURS=6                    # default
+# export FATHOM_PRICE_SOURCE=yahoo                  # default; stooq is the automatic fallback
+uv run fathom fetch NFLX --force
+```
+
+Sources and their terms:
+
+- **SEC EDGAR** (official): the latest 10-K and up to four latest 10-Qs, `company_tickers.json`
+  and XBRL company-concept facts. SEC's fair-access policy requires a contact address in the
+  `User-Agent` header and caps requests at 10/second; Fathom sends `FATHOM_SEC_CONTACT` in the
+  header and throttles itself to ≤ 8 requests/second, well under the cap. Live mode refuses to
+  start without `FATHOM_SEC_CONTACT` set.
+- **Yahoo Finance** (chart endpoint) and **Stooq** (CSV download) for daily price bars — both
+  are **unofficial, undocumented endpoints that may change or block requests without notice**;
+  Stooq is the automatic fallback when Yahoo fails, and Stooq returned a bot-challenge HTML page
+  (not data) during our own probes, which is exactly the kind of failure the fallback and the
+  `SOURCE_HTTP` error path exist for.
+- **XBRL-derived valuation ratios are approximations**, not vendor figures: market cap, P/E, P/B
+  and dividend yield are computed from SEC XBRL company-concept facts (shares outstanding,
+  trailing diluted EPS, stockholders' equity, trailing dividends per share) combined with the
+  latest close, not sourced from a pricing vendor's own calculation.
+
+Live fetches are cached under `.cache/live/<TICKER>/` with a 6-hour TTL (`FATHOM_LIVE_TTL_HOURS`);
+`fathom fetch TICKER --force` bypasses the cache and re-fetches everything. `quote`, `filings`,
+`brief` and `ask` all accept `--source fixture` to go back to the committed dataset at any time.
+See [`docs/design/05-m4-live-data.md`](docs/design/05-m4-live-data.md) for the full design and
+[`docs/SHOWCASE.md`](docs/SHOWCASE.md) for a real `fathom fetch` run with its output pasted
+verbatim.
+
 ## CLI, API, MCP
 
 ```bash

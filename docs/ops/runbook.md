@@ -26,6 +26,37 @@
 
 Switching modes is an environment change followed by a restart of the surface.
 
+## Live data mode (T-021, `docs/design/05-m4-live-data.md`)
+
+Separate from the LLM provider switch above: `FATHOM_DATA_SOURCE` controls where filings, prices
+and the valuation snapshot come from.
+
+| Variable | Default | Live data demo |
+|---|---|---|
+| `FATHOM_DATA_SOURCE` | `fixture` | `live` |
+| `FATHOM_SEC_CONTACT` | unset | required — an operator contact address, never committed |
+| `FATHOM_LIVE_CACHE_DIR` | `.cache/live` | same |
+| `FATHOM_LIVE_TTL_HOURS` | `6` | same |
+| `FATHOM_PRICE_SOURCE` | `yahoo` | same (`stooq` is the automatic fallback) |
+
+Start: `FATHOM_DATA_SOURCE=live FATHOM_SEC_CONTACT=<contact> uv run fathom fetch TICKER --force`
+pre-warms the cache and prints filing/bars/snapshot coverage — run this once before a live demo
+to confirm the network path works. Fallback: unset `FATHOM_DATA_SOURCE` (or `--source fixture`
+on any command) to return instantly to the offline 20-ticker fixture universe — no restart of the
+gate or CI is ever required, since neither touches the network (NFR-013).
+
+| Symptom | Cause | Action |
+|---|---|---|
+| `error SOURCE_CONFIG: FATHOM_SEC_CONTACT is required...` | live mode without a contact | export `FATHOM_SEC_CONTACT`, or drop back to `--source fixture` |
+| `error SOURCE_HTTP: ...` | SEC/Yahoo/Stooq unreachable, rate-limited, or returned a non-data page (e.g. Stooq's bot-challenge HTML) | retry once; fall back to `--source fixture` for the demo |
+| `error SOURCE_EMPTY: no bars for '<TICKER>'` | ticker known to EDGAR but Yahoo/Stooq have no bars, or no 10-K/10-Q in the last 24 months | try a different ticker; this is a real data gap, not a bug |
+| Live fetch feels stale | inside the 6h TTL | `fathom fetch TICKER --force` bypasses it |
+
+The opt-in network smoke test — never run by the gate or CI —
+`FATHOM_NETWORK_TESTS=1 FATHOM_SEC_CONTACT=<contact> uv run pytest tests/test_live_network.py -q`
+exercises this same path end to end against two real tickers (NFLX, COST) outside the fixture
+universe.
+
 ## Common failures
 
 | Symptom | Cause | Action |

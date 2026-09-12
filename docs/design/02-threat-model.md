@@ -27,6 +27,7 @@ mistake (key in repo, bodies in logs).
 | B3 | fathom package ↔ fixtures on disk (data trust) | HLD data |
 | B4 | fathom package ↔ audit file (what leaves into logs) | HLD data |
 | B5 | Build pipeline: agents ↔ repo, Hugging Face downloads, tickets | SKILL §agent security |
+| B6 | fathom ↔ SEC EDGAR / Yahoo Finance / Stooq (live mode, network egress) | `05-m4-live-data.md` §2 |
 
 ## STRIDE table
 
@@ -45,6 +46,10 @@ mistake (key in repo, bodies in logs).
 | B4 | I | Audit file contains prompts, questions or keys | medium | medium | Default mode stores hashes and counts only; bodies behind `FATHOM_AUDIT_BODIES=1`; redaction test (C-12) | opt-in mode stores bodies by design | owner |
 | B5 | T/E | Agent obeys instructions found in datasets, docs or tool output | medium | high | Shipyard rule 10; verifier separation; scanners in gate; downloads only from named Hugging Face ids (C-21, C-22) | — | owner |
 | B5 | T | Malicious dependency | low | high | Minimal pinned dependency set (`uv.lock`); no new dependency without pack listing (C-13) | no SBOM tooling in the time box | owner |
+| B6 | T | Tampered or malformed HTML/JSON from EDGAR/Yahoo/Stooq | low | medium | Stdlib `html`+`re` parsing only, no script execution; contract validation (`SecCompany`/`SecFiling`/`LiveManifest`); 25 MB per-document size cap (`05-m4-live-data.md` §2, §4) | none | owner |
+| B6 | D | Rate limiting or outages on SEC/Yahoo/Stooq | medium | low | Per-host throttle (≥0.12s to sec.gov/data.sec.gov, ≤8 req/s well under SEC's 10 req/s fair-access limit); on-disk response cache; Stooq automatic price fallback; clean `SOURCE_HTTP` mapping; fixture mode always available (`05-m4-live-data.md` §2, §3) | live demo can still be network-blocked; fixture fallback is the documented mitigation | owner |
+| B6 | I | SEC contact email leaves the machine in the User-Agent header | certain (by SEC policy) | low | Contact configured per operator via `FATHOM_SEC_CONTACT`, never committed to the repo; required before any live request is sent (`SOURCE_CONFIG` otherwise) (`05-m4-live-data.md` §1 FR-025) | accepted — required by SEC's fair-access policy | owner |
+| B6 | R | No record of which live sources/documents were used | low | medium | `manifest.json` per ticker records fetched-at, filing accessions, URLs and bars/snapshot source strings (`05-m4-live-data.md` §3, §4) | manifest is local, not tamper-evident (same residual as B4) | owner |
 
 ## High-risk components (feeds Planner's risk class)
 
