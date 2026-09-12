@@ -180,6 +180,8 @@ def tokenize(text: str) -> list[str]                       # lowercase \w+ , len
 def chunk_section(section: Section, size: int = 1200, overlap: int = 200) -> list[Chunk]   # split at sentence boundaries when possible; doc_id f"{accession}#{section_id}#{ordinal}"
 class BM25Index:
     def __init__(self, chunks: list[Chunk], k1: float = 1.5, b: float = 0.75) -> None
+    # D-008: the indexed token stream of a chunk is tokenize(section title) + tokenize(chunk text);
+    # title tokens come from CANONICAL_SECTIONS[section_id]. Chunk.text is unchanged.
     def search(self, query: str, k: int = 6) -> list[Hit]   # hits with score > 0 only, descending, ties by doc_id
 @functools.cache
 def index_for(ticker: str, data_dir: Path) -> BM25Index    # all canonical sections of all filings for the ticker
@@ -285,8 +287,9 @@ Envelope: `{"ok": bool, "data": object | null, "error": {"code": str, "message":
 CLI (FROZEN): `fathom quote T`, `fathom filings T`, `fathom brief T [--json]`,
 `fathom ask T "question" [--json]`, `fathom bench [--out metrics/headline.json]`,
 `fathom probe` (sends `{"ping": true}` with `SYSTEM_PROBE`, prints provider, model, latency, first
-80 chars of the reply), `fathom app` (streamlit run app/main.py), `fathom api [--port 8000]`,
-`fathom mcp`. `FathomError` → stderr `error <CODE>: <message>` and exit 2.
+80 chars of the reply), `fathom app` (streamlit run app/main.py), `fathom api [--host 127.0.0.1] [--port 8000]`
+(D-008: binds loopback by default; `--host 0.0.0.0` is an explicit choice), `fathom mcp`.
+`POST /api/ask` body `question` is bounded to 2 000 characters (422 beyond). `FathomError` → stderr `error <CODE>: <message>` and exit 2.
 
 MCP tools (optional): `get_quote(ticker)`, `list_filings(ticker)`, `get_briefing(ticker)`,
 `ask_filings(ticker, question)` → JSON of the contracts above; descriptions end with the disclaimer.
@@ -307,6 +310,9 @@ Values are illustrative; the shape is frozen with one split: the three timing-de
 `metrics/timing.json` (gitignored) so that `metrics/headline.json` is byte-deterministic and the
 gate's `git diff --exit-code -- metrics/headline.json` step is meaningful; `metrics/render.py`
 reads both files and `--check` compares the deterministic payload against `metrics/card.json`.
+`briefing_offline.latency_ms_median` (D-008) is the median wall-clock of the whole
+`brief(ticker)` call per ticker measured with `time.perf_counter`, with section caches cold for
+the first ticker and warm thereafter (report as measured), not the provider's own latency.
 `metrics/card.json` is the rendered card model: `{"title", "generated_at", "kpis": [{"key","label","value","unit","target","status"}]}`; `metrics/card.md` is its markdown.
 
 ## 6. Prompts and section policy (FROZEN text lives in `fathom/prompts.py`)

@@ -107,3 +107,17 @@ Decision: LLD §2.10 gains the truncation rule (text → 599 chars + "…", quot
 gets a fresh Security Reviewer; T-006 closes only after T-014's review is CLEAR.
 Consequences: contracts unchanged; prompt text amended (frozen-text change logged here).
 Approver: Architecture lead (standing authorisation, D-000).
+
+## D-008 — Polish amendments from W5 reviews   (2026-09-12, phase 6, status: accepted)
+Context: T-010 measured the golden-query retrieval hit-rate at 0.7571 against the pack's 0.9
+target (BM25 over chunk text alone under-ranks sections whose defining word is in the title,
+e.g. "cybersecurity", "controls and procedures"); its offline latency KPI reported the
+provider's latency (≈0 ms) rather than the briefing's wall-clock; T-009's Security Reviewer
+found the API binds 0.0.0.0 by default (MEDIUM) and the ask body has no length bound (LOW).
+Decision: LLD §2.6 — index tokens are title tokens + chunk tokens (explainable, deterministic;
+chunk text unchanged); §4 — `fathom api --host` defaults to 127.0.0.1, ask body bounded to
+2 000 characters; §5 — latency KPI is end-to-end `brief()` wall-clock. All delivered by T-013.
+If title boosting still leaves the hit-rate below 0.9, the measured value is reported and the
+card target becomes informational — no threshold is edited to pass.
+Consequences: T-003's PASS stands (tokenisation of chunk text unchanged); bench headline changes.
+Approver: Architecture lead (standing authorisation, D-000).
