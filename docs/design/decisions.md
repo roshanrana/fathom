@@ -96,3 +96,14 @@ Consequences: T-006's MCD allowlist and reworded AC4 phrase are removed by T-013
 headline changes and is re-rendered; packs T-002/T-005 stay PASS (their verdicts predate the
 amendment; T-013's verifier re-checks the amended criteria).
 Approver: Architecture lead (standing authorisation, D-000).
+
+## D-007 — Security fix: draft-to-claim conversion never raises; question is data   (2026-09-12, phase 6, status: accepted)
+Context: T-006's Security Reviewer found a HIGH: `Claim.text` has `max_length=600` but
+`DraftClaim` has no cap, so an over-long model claim escapes the repair path and raises an
+unhandled `ValidationError` (C-22). T-007's reviewer found a MEDIUM: `SYSTEM_ASK` declares
+excerpts as data but not the advisor's question (B1 control text).
+Decision: LLD §2.10 gains the truncation rule (text → 599 chars + "…", quote → 2 000 chars);
+§6.5 `SYSTEM_ASK` gains the question-is-data sentence. Delivered by T-014 (risk medium), which
+gets a fresh Security Reviewer; T-006 closes only after T-014's review is CLEAR.
+Consequences: contracts unchanged; prompt text amended (frozen-text change logged here).
+Approver: Architecture lead (standing authorisation, D-000).
