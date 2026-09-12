@@ -121,3 +121,7 @@ If title boosting still leaves the hit-rate below 0.9, the measured value is rep
 card target becomes informational — no threshold is edited to pass.
 Consequences: T-003's PASS stands (tokenisation of chunk text unchanged); bench headline changes.
 Approver: Architecture lead (standing authorisation, D-000).
+Addendum (T-013 handoff, accepted): pattern 1 gains an optional `(be\s+)?` so progressive forms
+("should be buying") trip the guard; LLD §6.4 updated. The §2.5 step 7 fallback also activates
+for nine other 10-Ks that have at least one canonical body under 400 characters — the LLD's
+stated trigger, verified by T-013's Verifier on a per-filing spot check.

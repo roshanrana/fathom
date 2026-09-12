@@ -367,7 +367,7 @@ sentence of each of the top 3 excerpts; `not_found` when none qualifies. Returns
 
 ### 6.4 Advice patterns (frozen; case-insensitive; amended by D-006 — inflections on patterns 1, 3, 9; "stock price" on 11)
 ```
-\b(we|i|you|investors?|clients?|one)\s+(should|ought to|must|need to)\s+(buy|sell|hold|invest|avoid|add|trim|accumulate|short)\w*
+\b(we|i|you|investors?|clients?|one)\s+(should|ought to|must|need to)\s+(be\s+)?(buy|sell|hold|invest|avoid|add|trim|accumulate|short)\w*
 \b(strong\s+)?(buy|sell|hold)\s+(rating|recommendation|signal|call|idea)\b
 \brecommend(s|ed|ation|ations|ing)?\b[^.]{0,60}\b(buy\w*|sell\w*|hold\w*|purchas\w*|invest\w*|position)\b
 \bprice\s+target\b
