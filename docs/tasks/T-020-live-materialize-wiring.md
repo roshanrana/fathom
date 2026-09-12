@@ -31,7 +31,8 @@ pre_close, change_percent, volume, + snapshot fields. TTL: if `manifest.json` ex
 `fetched_at` is within `live_ttl_hours` and `force` is false, return it without any HTTP call.
 
 ## Scope (files this task may touch)
-- fathom/live/__init__.py, fathom/live/build.py, fathom/data.py (`require_ticker(ticker, settings=None)`), fathom/config.py (only if a helper is needed), fathom/briefing.py, fathom/ask.py, fathom/cli.py, fathom/api.py, fathom/mcp_server.py, app/main.py, app/components/rendering.py
+- fathom/live/__init__.py, fathom/live/build.py, fathom/data.py (`require_ticker(ticker, settings=None, data_dir=None)` per the amended §5), fathom/config.py (only if a helper is needed), fathom/briefing.py, fathom/ask.py, fathom/cli.py, fathom/api.py, fathom/mcp_server.py, app/main.py, app/components/rendering.py
+- attempt 2 additions: fathom/quotes.py, fathom/filings.py, fathom/retrieval.py (only the `require_ticker(..., data_dir=...)` call sites), tests/test_quotes.py, tests/test_filings.py, tests/test_retrieval.py (existence-via-data_dir tests)
 - tests/test_live_build.py, tests/test_data.py, tests/test_cli.py, tests/test_api.py, tests/test_app.py, tests/test_mcp.py, tests/test_briefing.py, tests/test_ask.py (source-routing tests only)
 
 ## Acceptance criteria
@@ -42,6 +43,7 @@ pre_close, change_percent, volume, + snapshot fields. TTL: if `manifest.json` ex
 - AC5: API: `GET /api/quote/AAPL?source=live` routes to the cache (MockTransport injected via `create_app(settings, http=...)` or a monkeypatched client factory); `meta.source` present on every response; `?source=bogus` → 422.
 - AC6: Page (AppTest, live settings with a monkeypatched materialize that returns a prepared cache dir): sidebar radio shows both sources; in live mode a text input + "Fetch" button appear; the status strip shows "source: live" and the fetched-at time; a `SOURCE_HTTP` from materialize renders as `st.error`. MCP: `get_quote("AAPL", source="live")` works via the same monkeypatch.
 - AC7: Full gate green with no network; mypy strict; tests named `test_fr020_*`, `test_fr024_*`, `test_nfr012_*` (NFR-012 test records the elapsed time of a mocked cold materialize as informational).
+- AC8 (attempt 2, from the verdict and security review): a non-fixture ticker (NFLX, present only in the mocked SEC map) succeeds end to end in live mode on EVERY surface — CLI `fetch`/`quote`/`filings`/`brief`/`ask --source live`, API `?source=live`, MCP `source="live"`, page — with a MockTransport; a fixture-mode call with NFLX still raises `UNKNOWN_TICKER`; `materialize("../x", …)` and `data_dir_for("../x", …)` raise `UNKNOWN_TICKER` before any path is built (assert no directory created under the cache root); the API returns 503 for `SOURCE_CONFIG`, 502 for `SOURCE_HTTP`, 404 for `SOURCE_EMPTY`.
 
 ## Validation commands (targeted)
 - `uv run pytest tests/test_live_build.py tests/test_data.py tests/test_cli.py tests/test_api.py tests/test_app.py tests/test_mcp.py -q`

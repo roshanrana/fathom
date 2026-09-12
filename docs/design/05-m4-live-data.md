@@ -117,9 +117,17 @@ reason "too large".
 CLI: `fathom fetch TICKER [--force] [--source live]` prints the manifest summary (filings with
 forms/dates, section coverage per accession, bars range and source, snapshot fields present);
 `quote`, `filings`, `brief`, `ask` gain `--source {fixture,live}` (default from settings).
-`require_ticker(ticker, settings=None)`: fixture mode unchanged; live mode accepts `^[A-Z][A-Z0-9.\-]{0,9}$`
-after upper-casing and defers existence to `SecClient.lookup` (`UNKNOWN_TICKER` if absent from the
-SEC map). Page: sidebar radio "Data source" (Fixtures — 20 tickers / Live — SEC EDGAR + Yahoo),
+`require_ticker(ticker, settings=None, data_dir=None)` (amended after T-020 attempt 1): the
+ticker is upper-cased and must match `^[A-Z][A-Z0-9.\-]{0,9}$` in every mode (shape check first,
+before any path is built — B1/B6 control); then, when `data_dir` is given, existence is checked
+against that directory's `companies.parquet` (this makes fixture data and live caches behave the
+same way: the fixture directory lists the 20-ticker universe, a live cache lists its one ticker);
+when `data_dir` is None and `settings` is fixture mode or None, existence is checked against
+`UNIVERSE`; when `data_dir` is None and `settings` is live, only the shape is checked and
+existence is deferred to `SecClient.lookup`. Internal callers that receive a `data_dir`
+(`quotes.quote_card`, `filings.filings_for`, `briefing.build_context`, `retrieval.index_for`)
+pass it. `materialize` runs the shape check before constructing the cache directory path.
+API status mapping gains `SOURCE_CONFIG` → 503, `SOURCE_HTTP` → 502, `SOURCE_EMPTY` → 404. Page: sidebar radio "Data source" (Fixtures — 20 tickers / Live — SEC EDGAR + Yahoo),
 free-text ticker input in live mode with a "Fetch" button, status strip adds "source: live ·
 fetched <time>"; a `SOURCE_*` error renders as `st.error`. API: `?source=live` on the four routes;
 `meta.source` added. MCP: optional `source` argument on the four tools.
