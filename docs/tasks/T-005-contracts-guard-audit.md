@@ -79,3 +79,9 @@ guard_hits, prompt: str | None = None, response: str | None = None (bodies only 
 B1 (advice elicitation), B4 (audit contents) — Security Reviewer at T2.
 
 ## Handoff (Implementer fills, ≤10 lines)
+- Implemented: `fathom/contracts.py` (Source/Claim/Briefing/Answer/DraftClaim/BriefingDraft/AnswerDraft, extra="ignore" on drafts); `fathom/guard.py` (14 frozen ADVICE_PATTERNS, is_advice, normalise, verify_claim, scrub_claims, GUARD_NOTICE, no logging); `fathom/audit.py` (AuditRecord, record() with mkdirs, body-dropping, AUDIT_WRITE on OSError, single `audit written path=%s` INFO log).
+- Files changed: fathom/contracts.py, fathom/guard.py, fathom/audit.py, tests/test_contracts.py, tests/test_guard.py, tests/test_audit.py.
+- Tests run: `pytest tests/test_contracts.py tests/test_guard.py tests/test_audit.py -q` → 63 passed (6 contracts, 52 guard incl. 32 adversarial + 12 benign parametrized, 5 audit). Full gate `uv run python scripts/check.py` → all checks passed (147 total tests, 97.5% coverage; contracts/guard/audit each 100%).
+- Deviations: none from spec text; test names use `test_fr007_*` (contracts), `test_fr008_*`/`test_nfr008_*` (guard), `test_fr011_*`/`test_nfr006_*` (audit) per AC7.
+- Open questions: none. One fix mid-task — `ruff format` reformatted 3 files (whitespace only, no logic change) and the never-log test's placeholder token had to be shortened (`sk-ant-q1` etc.) so `scripts/secrets_scan.py`'s `sk-ant-[A-Za-z0-9_-]{10,}` pattern didn't flag the fake secret in test source; behavior asserted is unchanged.
+- Budget actual: ~45k input tokens, ~35 tool calls, ~30 min wall clock.
