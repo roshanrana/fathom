@@ -53,3 +53,17 @@ returns `model_dump_json()` of the contract; `FathomError` → return
 B1 (tool input is untrusted; goes through the same guard via `ask`).
 
 ## Handoff (Implementer fills, ≤10 lines)
+
+Delivered `fathom/mcp_server.py` (FastMCP("fathom"), 4 tools: get_quote/list_filings/get_briefing/ask_filings,
+each returns JSON text — `model_dump_json()`/dumped list, never raises, catches `FathomError` into
+`{"ok": false, "error": {...}}`; descriptions end with `Settings().disclaimer`), `tests/test_mcp.py`
+(8 tests, `test_fr019_*`, `pytest.importorskip("mcp")`), and `docs/mcp.md`. AC1-AC4 met.
+AC3: used in-process `mcp.shared.memory.create_connected_server_and_client_session` (Windows-stable,
+same pattern as lodestar's template) rather than real stdio spawn — noted here per the AC's fallback clause.
+Targeted tests/ruff/mypy all green. Full gate (`uv run python scripts/check.py`): 1 failure,
+`tests/test_cli.py::test_fr013_mcp_reports_not_available_before_t012_ships` — pre-existing stub test
+(cli.py/test_cli.py are in T-013's scope, not mine) that calls `runner.invoke(app, ["mcp"])`; now that
+`fathom.mcp_server` exists, `main()`/`server.run()` runs for real under CliRunner's captured stdio and
+raises before reaching its own `if exit_code == 0: pytest.skip(...)` guard. Everything else (226 other
+tests) passes; this is the only failure and it's outside my scope — flagging for T-013/cli owner to
+update the test (e.g. skip/mock `server.run()` when invoking `mcp` under CliRunner).
