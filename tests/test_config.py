@@ -73,8 +73,10 @@ def test_nfr003_pyproject_declares_lld_dependency_set() -> None:
 
     groups = data["dependency-groups"]
     assert "dev" in groups
-    assert "mcp" in groups
-    assert "screenshots" in groups
+
+    optional_deps = project["optional-dependencies"]
+    assert "mcp" in optional_deps
+    assert "screenshots" in optional_deps
     assert 'fathom = "fathom.cli:app"' not in (REPO_ROOT / "pyproject.toml").read_text(
         encoding="utf-8"
     )

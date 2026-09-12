@@ -557,6 +557,14 @@ dependencies = [
     { name = "uvicorn" },
 ]
 
+[package.optional-dependencies]
+mcp = [
+    { name = "mcp" },
+]
+screenshots = [
+    { name = "playwright" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "mypy" },
@@ -566,18 +574,14 @@ dev = [
     { name = "pytest-cov" },
     { name = "ruff" },
 ]
-mcp = [
-    { name = "mcp" },
-]
-screenshots = [
-    { name = "playwright" },
-]
 
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.111" },
     { name = "httpx", specifier = ">=0.27" },
+    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.9,<2" },
     { name = "pandas", specifier = ">=2.2" },
+    { name = "playwright", marker = "extra == 'screenshots'", specifier = ">=1.45" },
     { name = "plotly", specifier = ">=5.22" },
     { name = "pyarrow", specifier = ">=16" },
     { name = "pydantic", specifier = ">=2.7" },
@@ -585,6 +589,7 @@ requires-dist = [
     { name = "typer", specifier = ">=0.12" },
     { name = "uvicorn", specifier = ">=0.30" },
 ]
+provides-extras = ["mcp", "screenshots"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -595,8 +600,6 @@ dev = [
     { name = "pytest-cov" },
     { name = "ruff" },
 ]
-mcp = [{ name = "mcp", specifier = ">=1.9,<2" }]
-screenshots = [{ name = "playwright", specifier = ">=1.45" }]
 
 [[package]]
 name = "greenlet"

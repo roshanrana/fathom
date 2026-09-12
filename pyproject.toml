@@ -20,6 +20,14 @@ dependencies = [
     "pandas>=2.2",
 ]
 
+[project.optional-dependencies]
+mcp = [
+    "mcp>=1.9,<2",
+]
+screenshots = [
+    "playwright>=1.45",
+]
+
 [dependency-groups]
 dev = [
     "ruff",
@@ -28,12 +36,6 @@ dev = [
     "pytest-cov",
     "pandas-stubs",
     "pyarrow-stubs",
-]
-mcp = [
-    "mcp>=1.9,<2",
-]
-screenshots = [
-    "playwright>=1.45",
 ]
 
 [tool.hatch.build.targets.wheel]
