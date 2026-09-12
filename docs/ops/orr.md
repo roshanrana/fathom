@@ -16,4 +16,5 @@ interview. Items marked "hosting" are what a pilot deployment adds; they are not
 | Backup/restore drill; DR | owner | fixtures and code in git; `scripts/fetch_data.py` rebuilds data; no runtime state to restore | D-002 |
 | Rollback rehearsed — time taken | owner | `git checkout <tag>` + `uv sync`; rehearsed in the worktree-based verification (each verifier resyncs a pinned commit in < 2 min) | verdict files |
 | Change record approved | owner | `docs/ops/change-record.md` | ledger G8 |
+| Live data mode (v0.2.0, M4) | owner | opt-in via `FATHOM_DATA_SOURCE=live` + `FATHOM_SEC_CONTACT`; SEC fair-access throttle and User-Agent; Yahoo/Stooq are unofficial endpoints — fixture mode remains the demo default and the only mode CI exercises; cache under `.cache/live/` with 6 h TTL, `fathom fetch --force` to refresh | `05-m4-live-data.md`, T-018 … T-024 verdicts, T-021 network smoke |
 | Model-risk sign-off (AI components) | owner | model inventory and controls in `02-threat-model.md` AI-risk section; eval suite in the gate; live verified share reported from the audit log, not asserted | ledger G7/G8 |
