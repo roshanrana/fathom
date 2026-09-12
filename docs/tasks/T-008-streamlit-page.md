@@ -67,3 +67,13 @@ and answers in `st.session_state` keyed by ticker. Errors (`FathomError`) render
 B1 (user input passes straight to `ask`; page never renders raw model text as HTML — use `st.markdown` with `unsafe_allow_html=False`).
 
 ## Handoff (Implementer fills, ≤10 lines)
+Delivered: app/main.py (rewritten), app/components/{__init__,badges,rendering}.py,
+tests/test_app.py (replaces deleted tests/test_app_skeleton.py). Page only calls
+fathom.data/quotes/filings/briefing/ask + config.Settings; only FathomError caught;
+badges are plain text (✅/⚠️/⛔); st.markdown never unsafe_allow_html.
+Targeted: `pytest tests/test_app.py -q` → 8 passed; `ruff check app tests/test_app.py` +
+`ruff format --check app` → clean.
+Full gate FAILS, but only outside my scope: ruff E501 in fathom/api.py (lines 69/71), and
+test_config.py's test_nfr003_pyproject_declares_lld_dependency_set (pyproject.toml gained a
+`[project.scripts] fathom = "fathom.cli:app"` entry from concurrent T-006/T-007 work). No
+edits made under fathom/ or pyproject.toml. Untargeted `pytest -q`: 171 passed, 1 failed (same).
