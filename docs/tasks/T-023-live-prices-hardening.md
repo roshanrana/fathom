@@ -65,3 +65,9 @@ Targeted: 30/30 pass; scoped 4 files clean on ruff check/format + mypy strict. F
 `scripts/check.py` stops at `ruff format --check` on pre-existing unformatted app/main.py,
 fathom/cli.py, fathom/live/build.py, fathom/quotes.py (untouched by me, concurrent work) —
 mypy/pytest steps never reached.
+
+Attempt 2: Closed both new HIGHs. F1: `isinstance(dict/list)` checks on Yahoo
+`result`/`indicators`/`quote` + `AttributeError` added to `_PARSE_GUARD_EXCEPTIONS`. F2:
+`_TICKER_RE`/`_CIK_RE` now use `.fullmatch` (not `.match`+`$`), so "AAPL\n"/"0000320193\n" are
+rejected pre-request, 0 calls — http.py untouched (no InvalidURL path reachable, out of scope).
+5 new tests; targeted 35/35, mypy clean, full gate all green (390 passed).

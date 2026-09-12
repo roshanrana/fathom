@@ -203,6 +203,19 @@ def test_fr022_daily_bars_invalid_ticker_raises_unknown_ticker_before_request(
     assert calls == []
 
 
+def test_fr022_daily_bars_ticker_with_trailing_newline_raises_unknown_ticker_zero_requests(
+    tmp_path: Path,
+) -> None:
+    """T-023 attempt 2 F2: "AAPL\\n" must not slip past `$`-anchored validation."""
+    client, calls = _make_client(tmp_path)
+
+    with pytest.raises(FathomError) as excinfo:
+        client.daily_bars("AAPL\n")
+
+    assert excinfo.value.code == Code.UNKNOWN_TICKER
+    assert calls == []
+
+
 @pytest.mark.parametrize(
     "body",
     [
@@ -225,6 +238,16 @@ def test_fr022_daily_bars_invalid_ticker_raises_unknown_ticker_before_request(
             id="mismatched-array-lengths",
         ),
         pytest.param(b'{"chart": {"result": null}}', id="null-result"),
+        pytest.param(b'{"chart": {"result": "oops"}}', id="non-dict-result"),
+        pytest.param(
+            b'{"chart": {"result": [{"timestamp": [1700000000], "indicators": "garbage"}]}}',
+            id="non-dict-indicators",
+        ),
+        pytest.param(
+            b'{"chart": {"result": [{"timestamp": [1700000000], '
+            b'"indicators": {"quote": "garbage"}}]}}',
+            id="quote-not-a-list",
+        ),
     ],
 )
 def test_fr022_yahoo_malformed_bodies_fall_back_to_stooq(tmp_path: Path, body: bytes) -> None:

@@ -34,7 +34,16 @@ _MAX_STOOQ_ROWS = 10_000
 _TICKER_RE = re.compile(r"^[A-Z0-9.\-]{1,10}$")
 # T-023/T-019 F1, F2: any of these raised while parsing a Yahoo/Stooq body is a source failure
 # (triggers the other source's fallback), never an uncaught exception.
-_PARSE_GUARD_EXCEPTIONS = (TypeError, ValueError, KeyError, IndexError, json.JSONDecodeError)
+# T-023 attempt 2 F1: AttributeError added (a malformed Yahoo shape can be a truthy non-dict that
+# still passes a type-checker-only cast, so `.get()` on it raises AttributeError, not KeyError).
+_PARSE_GUARD_EXCEPTIONS = (
+    TypeError,
+    ValueError,
+    KeyError,
+    IndexError,
+    AttributeError,
+    json.JSONDecodeError,
+)
 
 PriceSource = Literal["yahoo", "stooq"]
 
@@ -65,7 +74,9 @@ class PriceClient:
         if `ticker` does not match the safe identifier pattern (T-019 F3).
         """
         symbol = ticker.upper()
-        if not _TICKER_RE.match(symbol):
+        # T-023 attempt 2 F2: fullmatch (not match+`$`) so a trailing "\n" cannot sneak through —
+        # Python's `$` matches end-of-string *or* just before one trailing "\n".
+        if not _TICKER_RE.fullmatch(symbol):
             raise FathomError(Code.UNKNOWN_TICKER, f"invalid ticker {symbol!r}", {"ticker": symbol})
         fallback: PriceSource = "stooq" if self._primary == "yahoo" else "yahoo"
         fetchers: dict[PriceSource, Callable[[str], pd.DataFrame]] = {
@@ -89,7 +100,12 @@ class PriceClient:
         body = self._http.get(url, ttl_hours=_BARS_TTL_HOURS, source="yahoo")
         try:
             payload = json.loads(body)
-            result = cast(dict[str, object], payload["chart"]["result"][0])
+            result = payload["chart"]["result"][0]
+            # T-023 attempt 2 F1: `result` may be a truthy non-dict (e.g. an error string); index
+            # [0] on a string succeeds via char-indexing, so validate the type explicitly rather
+            # than trusting the type-checker-only `cast`.
+            if not isinstance(result, dict):
+                raise TypeError("yahoo result is not a dict")
             frame = self._bars_from_yahoo(ticker, result)
         except _PARSE_GUARD_EXCEPTIONS as exc:
             raise _malformed_response_error("yahoo") from exc
@@ -99,9 +115,15 @@ class PriceClient:
 
     def _bars_from_yahoo(self, ticker: str, result: dict[str, object]) -> pd.DataFrame:
         timestamps = cast(list[int], result.get("timestamp") or [])
-        indicators = cast(dict[str, object], result.get("indicators") or {})
-        quote_list = cast(list[dict[str, object]], indicators.get("quote") or [])
+        indicators = result.get("indicators") or {}
+        if not isinstance(indicators, dict):
+            raise TypeError("yahoo indicators is not a dict")
+        quote_list = indicators.get("quote") or []
+        if not isinstance(quote_list, list):
+            raise TypeError("yahoo quote is not a list")
         quote = quote_list[0] if quote_list else {}
+        if not isinstance(quote, dict):
+            raise TypeError("yahoo quote entry is not a dict")
         opens = cast(list[object], quote.get("open") or [])
         highs = cast(list[object], quote.get("high") or [])
         lows = cast(list[object], quote.get("low") or [])

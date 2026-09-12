@@ -65,7 +65,9 @@ def snapshot(
     string (T-019 F3).
     """
     del quote_time
-    if not _CIK_RE.match(cik):
+    # T-023 attempt 2 F2: fullmatch (not match+`$`) so a trailing "\n" cannot sneak through —
+    # Python's `$` matches end-of-string *or* just before one trailing "\n".
+    if not _CIK_RE.fullmatch(cik):
         raise FathomError(
             Code.SOURCE_HTTP,
             "invalid cik supplied to snapshot",

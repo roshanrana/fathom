@@ -190,6 +190,27 @@ def test_fr023_invalid_cik_raises_source_http_before_any_request(tmp_path: Path)
     assert calls == []
 
 
+def test_fr023_cik_with_trailing_newline_raises_source_http_zero_requests(
+    tmp_path: Path,
+) -> None:
+    """T-023 attempt 2 F2: "0000320193\\n" must not slip past `$`-anchored validation."""
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url))
+        return httpx.Response(404, content=b"not found")
+
+    sec = _make_sec(tmp_path, handler)
+
+    with pytest.raises(FathomError) as excinfo:
+        snapshot(sec, "0000320193\n", last_close=_LAST_CLOSE, quote_time=_QUOTE_TIME)
+
+    err = excinfo.value
+    assert err.code == Code.SOURCE_HTTP
+    assert err.details == {"source": "sec", "status": 0, "reason": "invalid identifier"}
+    assert calls == []
+
+
 def test_fr023_nan_and_infinity_literals_yield_none_and_json_serialisable(
     tmp_path: Path,
 ) -> None:
