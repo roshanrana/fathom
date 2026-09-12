@@ -119,6 +119,47 @@ def _malformed_response_error(source: str) -> FathomError:
     )
 
 
+def _str_field(obj: object, key: str) -> str | None:
+    """`obj[key]` if `obj` is a `dict` and the value is a `str`, else `None` (T-024 attempt-3).
+
+    Shared typed accessor: every SEC payload field read across `sec.py`, `facts.py` and
+    `prices.py` goes through one of these four helpers instead of a raw subscript/`.get()`, so a
+    wrongly-typed (but valid-JSON) value can never reach a raw index/attribute op unguarded — the
+    systemic version of the attempt-2 `submissions["exchanges"]` finding (a `cast()` has no
+    runtime effect; a truthy non-list value slipped through `exchanges[0]`).
+    """
+    if not isinstance(obj, dict):
+        return None
+    value = obj.get(key)
+    return value if isinstance(value, str) else None
+
+
+def _int_field(obj: object, key: str) -> int | None:
+    """`obj[key]` if `obj` is a `dict` and the value is an `int` (bool excluded), else `None`."""
+    if not isinstance(obj, dict):
+        return None
+    value = obj.get(key)
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value
+
+
+def _list_field(obj: object, key: str) -> list[object]:
+    """`obj[key]` if `obj` is a `dict` and the value is a `list`, else `[]`."""
+    if not isinstance(obj, dict):
+        return []
+    value = obj.get(key)
+    return value if isinstance(value, list) else []
+
+
+def _dict_field(obj: object, key: str) -> dict[str, object]:
+    """`obj[key]` if `obj` is a `dict` and the value is itself a `dict`, else `{}`."""
+    if not isinstance(obj, dict):
+        return {}
+    value = obj.get(key)
+    return cast(dict[str, object], value) if isinstance(value, dict) else {}
+
+
 def _decode_json(body: bytes, source: str) -> dict[str, object]:
     """Decode a JSON-object body from `source` (05-m4-live-data.md §4 SOURCE_HTTP guard, frozen).
 
@@ -261,15 +302,10 @@ class SecClient:
         for entry in raw.values():
             if not isinstance(entry, dict):
                 continue
-            ticker = entry.get("ticker")
-            title = entry.get("title")
-            cik_str = entry.get("cik_str")
-            if (
-                isinstance(ticker, str)
-                and isinstance(title, str)
-                and isinstance(cik_str, int)
-                and not isinstance(cik_str, bool)
-            ):
+            ticker = _str_field(entry, "ticker")
+            title = _str_field(entry, "title")
+            cik_str = _int_field(entry, "cik_str")
+            if ticker is not None and title is not None and cik_str is not None:
                 result[ticker.upper()] = entry
         if not result:
             raise _malformed_response_error("sec")
@@ -289,36 +325,43 @@ class SecClient:
         if entry is None:
             raise FathomError(Code.UNKNOWN_TICKER, f"unknown ticker {upper!r}", {"ticker": upper})
 
-        cik = f"{int(cast(int, entry['cik_str'])):010d}"
+        # Defense in depth: `entry` already passed `ticker_map`'s per-entry validation, but never
+        # index a payload-derived dict without a guard (T-024 attempt-2 finding: `cast()` has no
+        # runtime effect, so a value that only *looks* right to the type checker can still be
+        # wrongly-typed at runtime).
+        cik_str = _int_field(entry, "cik_str")
+        entry_ticker = _str_field(entry, "ticker")
+        if cik_str is None or entry_ticker is None:
+            raise _invalid_edgar_field_error()
+        cik = f"{cik_str:010d}"
         submissions = self._submissions(cik)
-        exchanges = cast(list[object], submissions.get("exchanges") or [])
-        exchange = str(exchanges[0]) if exchanges and exchanges[0] else None
-        sic_description = submissions.get("sicDescription")
-        fiscal_year_end = submissions.get("fiscalYearEnd")
+
+        exchanges = _list_field(submissions, "exchanges")
+        first_exchange = exchanges[0] if exchanges else None
+        exchange = first_exchange if isinstance(first_exchange, str) and first_exchange else None
+        sic_description = _str_field(submissions, "sicDescription")
+        fiscal_year_end = _str_field(submissions, "fiscalYearEnd")
+        name = _str_field(submissions, "name") or _str_field(entry, "title") or ""
         return SecCompany(
-            ticker=str(entry["ticker"]).upper(),
+            ticker=entry_ticker.upper(),
             cik=cik,
-            name=str(submissions.get("name", entry.get("title", ""))),
+            name=name,
             exchange=exchange,
-            sic_description=str(sic_description) if sic_description else None,
-            fiscal_year_end=str(fiscal_year_end) if fiscal_year_end else None,
+            sic_description=sic_description,
+            fiscal_year_end=fiscal_year_end,
         )
 
     def filings(self, cik: str) -> list[SecFiling]:
         """The latest 10-K plus up to four 10-Qs filed within 730 days, newest first."""
         submissions = self._submissions(cik)
-        filings_raw = submissions.get("filings")
-        filings_block = filings_raw if isinstance(filings_raw, dict) else {}
+        filings_block = _dict_field(submissions, "filings")
         entries = _valid_table_rows(filings_block.get("recent"))
 
-        candidates = [entry for entry in entries if entry.get("form") in _QUALIFYING_FORMS]
+        candidates = [entry for entry in entries if _str_field(entry, "form") in _QUALIFYING_FORMS]
 
         if len(candidates) < _MIN_QUALIFYING_BEFORE_OLDER_PAGES:
-            files_raw = filings_block.get("files")
-            for page in files_raw if isinstance(files_raw, list) else []:
-                if not isinstance(page, dict):
-                    continue
-                name = str(page.get("name", ""))
+            for page in _list_field(filings_block, "files"):
+                name = _str_field(page, "name")
                 if not name:
                     continue
                 _validate_safe_name(name)
@@ -327,7 +370,9 @@ class SecClient:
                 page_table = _decode_json(body, "sec")
                 page_entries = _valid_table_rows(page_table)
                 candidates.extend(
-                    entry for entry in page_entries if entry.get("form") in _QUALIFYING_FORMS
+                    entry
+                    for entry in page_entries
+                    if _str_field(entry, "form") in _QUALIFYING_FORMS
                 )
 
         parsed = [self._to_filing(cik, entry) for entry in candidates]
@@ -386,18 +431,18 @@ class SecClient:
         return _decode_json(body, "sec")
 
     def _to_filing(self, cik: str, entry: dict[str, object]) -> SecFiling:
-        try:
-            form = cast(Literal["10-K", "10-Q"], entry["form"])
-            accession = str(entry["accessionNumber"])
-            primary_document = str(entry["primaryDocument"])
-        except (KeyError, TypeError) as exc:
-            # Defense in depth: `entry` should already be a `_valid_table_rows` row (all of
-            # form/accessionNumber/primaryDocument present as `str`), but never index an
-            # untrusted-derived entry without a guard (T-024 attempt-1 finding).
-            raise _malformed_response_error("sec") from exc
+        # Defense in depth: `entry` should already be a `_valid_table_rows` row (all of
+        # form/accessionNumber/primaryDocument present as `str`), but never index an
+        # untrusted-derived entry without a guard (T-024 attempt-1/attempt-3 findings).
+        form_raw = _str_field(entry, "form")
+        accession = _str_field(entry, "accessionNumber")
+        primary_document = _str_field(entry, "primaryDocument")
+        if form_raw not in _QUALIFYING_FORMS or accession is None or primary_document is None:
+            raise _malformed_response_error("sec")
+        form = cast(Literal["10-K", "10-Q"], form_raw)
         _validate_accession(accession)
         _validate_safe_name(primary_document)
-        filing_date = _parse_date(str(entry.get("filingDate", "")))
+        filing_date = _parse_date(_str_field(entry, "filingDate") or "")
         if filing_date is None:
             raise FathomError(
                 Code.CONTRACT_INVALID,
@@ -409,7 +454,7 @@ class SecClient:
             accession=accession,
             form=form,
             filing_date=filing_date,
-            report_date=_parse_date(str(entry.get("reportDate", ""))),
+            report_date=_parse_date(_str_field(entry, "reportDate") or ""),
             primary_document=primary_document,
             url=_document_url(cik, accession, primary_document),
         )

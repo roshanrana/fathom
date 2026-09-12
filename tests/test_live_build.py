@@ -5,7 +5,9 @@ All tests use `httpx.MockTransport`; no real network call is ever made (NFR-013)
 
 from __future__ import annotations
 
+import copy
 import json
+import random
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -392,3 +394,114 @@ def test_nfr012_cold_materialize_elapsed_time_is_recorded(tmp_path: Path) -> Non
     # Informational only (NFR-012 measures real cold starts); a mocked call is not gated on a
     # tight bound, only sanity-checked against the 30s live budget so a runaway loop would fail.
     assert elapsed < 30.0
+
+
+# --- Structural fuzz (T-024 attempt-3 AC2): mutate the *parsed* structure end to end -----------
+
+_STRUCTURAL_REPLACEMENTS: list[object] = [{}, [], None, "x", 0, True, [1], {"a": 1}]
+
+
+def _collect_paths(node: object, prefix: tuple[object, ...] = ()) -> list[tuple[object, ...]]:
+    """Every path (including the empty root path) reachable by dict-key/list-index steps."""
+    paths = [prefix]
+    if isinstance(node, dict):
+        for key, value in node.items():
+            paths.extend(_collect_paths(value, prefix + (key,)))
+    elif isinstance(node, list):
+        for index, value in enumerate(node):
+            paths.extend(_collect_paths(value, prefix + (index,)))
+    return paths
+
+
+def _structural_mutate(data: object, rng: random.Random) -> object:
+    """Deep-copy `data` then replace (or, for a dict key, delete) one random node at any depth."""
+    mutated = copy.deepcopy(data)
+    path = rng.choice(_collect_paths(mutated))
+    if not path:
+        return rng.choice(_STRUCTURAL_REPLACEMENTS)
+    parent: object = mutated
+    for key in path[:-1]:
+        parent = parent[key]  # type: ignore[index]
+    last = path[-1]
+    if isinstance(parent, dict) and rng.random() < 0.3:
+        del parent[last]
+    else:
+        parent[last] = rng.choice(_STRUCTURAL_REPLACEMENTS)  # type: ignore[index]
+    return mutated
+
+
+def test_fr024_structural_fuzz_materialize_mutated_payloads_raise_only_fathom_error(
+    tmp_path: Path,
+) -> None:
+    """Structural (parsed-node) fuzz through the full `materialize()` pipeline, 300 iterations.
+
+    Same mutation model as the sec.py-level structural fuzz in `test_live_sec.py` (a random
+    node at any depth in the ticker map / submissions / one of the four XBRL concept files / the
+    Yahoo chart becomes `{}`/`[]`/`None`/`"x"`/`0`/`True`/`[1]`/`{"a": 1}`, or a dict key is
+    deleted, then the structure is re-serialised so the body stays valid JSON), driven end to
+    end through `materialize()`. Every iteration must either raise `FathomError` or return a
+    valid `LiveManifest` — and, per this task's extra invariant, a raise must never leave a
+    partial `<live_cache_dir>/AAPL/` directory behind (T-024 attempt-2 confirmed a bare `KeyError`
+    reachable this way left zero partial directories only because the crash preceded
+    `live_dir.mkdir`; this test guards that the *fixed* code keeps that property under the wider
+    structural-mutation net, not just for the one field attempt-2 found).
+    """
+    rng = random.Random(24024)
+    tickers = json.loads(_COMPANY_TICKERS)
+    submissions = json.loads(_AAPL_SUBMISSIONS)
+    chart = json.loads(_YAHOO_CHART)
+    concepts = {name: json.loads(body) for name, body in _CONCEPT_BODIES.items()}
+    concept_names = list(concepts)
+    targets = ["tickers", "submissions", "yahoo", *concept_names]
+
+    for i in range(300):
+        target = targets[i % len(targets)]
+        mutated_tickers = _structural_mutate(tickers, rng) if target == "tickers" else tickers
+        mutated_submissions = (
+            _structural_mutate(submissions, rng) if target == "submissions" else submissions
+        )
+        mutated_chart = _structural_mutate(chart, rng) if target == "yahoo" else chart
+        mutated_concepts = dict(concepts)
+        if target in concept_names:
+            mutated_concepts[target] = _structural_mutate(concepts[target], rng)
+
+        def handler(
+            request: httpx.Request,
+            mt: object = mutated_tickers,
+            ms: object = mutated_submissions,
+            mch: object = mutated_chart,
+            mc: dict[str, object] = mutated_concepts,
+        ) -> httpx.Response:
+            url = str(request.url)
+            if url == "https://www.sec.gov/files/company_tickers.json":
+                return httpx.Response(200, content=json.dumps(mt).encode())
+            if url == "https://data.sec.gov/submissions/CIK0000320193.json":
+                return httpx.Response(200, content=json.dumps(ms).encode())
+            if url.endswith(_10K_DOC_SUFFIX) or url.endswith(_10Q_DOC_SUFFIXES):
+                return _default_handler(request)
+            if url.startswith("https://query1.finance.yahoo.com/v8/finance/chart/"):
+                return httpx.Response(200, content=json.dumps(mch).encode())
+            if "companyconcept" in url:
+                for concept, body in mc.items():
+                    if url.endswith(f"/{concept}.json"):
+                        return httpx.Response(200, content=json.dumps(body).encode())
+                return httpx.Response(404)
+            return httpx.Response(404)
+
+        iter_root = tmp_path / f"struct{i}"
+        client = httpx.Client(transport=httpx.MockTransport(handler))
+        http = LiveHttp(
+            cache_dir=iter_root / "live",
+            user_agent="Fathom/0.1.0 (t@example.com)",
+            client=client,
+            sleeper=lambda _seconds: None,  # no real sleep: the per-host throttle is irrelevant
+        )
+        settings = _settings(iter_root)
+        live_dir = iter_root / "live" / "AAPL"
+
+        try:
+            manifest = materialize("AAPL", settings, http=http)
+            assert manifest.ticker == "AAPL"
+            assert live_dir.exists()
+        except FathomError:
+            assert not live_dir.exists(), "a raise must never leave a partial cache directory"

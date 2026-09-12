@@ -19,7 +19,7 @@ from collections.abc import Callable
 from datetime import date, datetime
 
 from fathom.errors import Code, FathomError
-from fathom.live.sec import SecClient
+from fathom.live.sec import SecClient, _dict_field, _str_field
 
 _QUARTERLY_FRAME_RE = re.compile(r"^CY\d{4}Q\d$")
 _INSTANT_FRAME_RE = re.compile(r"^CY\d{4}Q\dI$")
@@ -145,11 +145,7 @@ def _fetch_concept(
 
 def _entries(payload: dict[str, object] | None) -> list[dict[str, object]]:
     """Flatten every unit's fact list, tolerating empty/malformed shapes."""
-    if payload is None:
-        return []
-    units = payload.get("units")
-    if not isinstance(units, dict):
-        return []
+    units = _dict_field(payload, "units")
     entries: list[dict[str, object]] = []
     for facts in units.values():
         if isinstance(facts, list):
@@ -160,9 +156,12 @@ def _entries(payload: dict[str, object] | None) -> list[dict[str, object]]:
 def _matching(
     entries: list[dict[str, object]], pattern: re.Pattern[str]
 ) -> list[dict[str, object]]:
-    return [
-        e for e in entries if isinstance(e.get("frame"), str) and pattern.match(str(e["frame"]))
-    ]
+    matched: list[dict[str, object]] = []
+    for entry in entries:
+        frame = _str_field(entry, "frame")
+        if frame is not None and pattern.match(frame):
+            matched.append(entry)
+    return matched
 
 
 def _numeric_val(
@@ -186,10 +185,10 @@ def _numeric_val(
 
 
 def _end_date(entry: dict[str, object]) -> date | None:
+    raw = _str_field(entry, "end")
+    if raw is None:
+        return None
     try:
-        raw = entry.get("end")
-        if not isinstance(raw, str):
-            return None
         return date.fromisoformat(raw)
     except Exception:  # noqa: BLE001 - whole-body parse guard, see _numeric_val above
         return None

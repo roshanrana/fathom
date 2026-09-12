@@ -63,3 +63,13 @@ raise malformed response if zero remain); wrapped `_to_filing` field access in t
 Seeded fuzz (seed 20240024) now passes. Full gate final line: `456 passed, 2 skipped, 2
 warnings in 44.35s` / `all checks passed` (95.34% coverage) — pasted verbatim into
 `docs/SHOWCASE.md` §1.
+
+Attempt 3: Added typed accessors `_str_field`/`_int_field`/`_list_field`/`_dict_field` in
+`sec.py` (default on non-dict/wrong-type, systemic fix for `cast()`-has-no-runtime-effect);
+replaced every direct payload subscript/`.get()` in `sec.py`/`facts.py`/`prices.py` with them
+(`lookup`'s `exchanges[0]` bug fixed; `build.py` untouched — it only reads DataFrame/internal
+dicts, not raw payload). Added seeded (24024) 300-iter structural (parsed-node
+replace/delete) fuzz to `test_live_sec.py` (lookup/filings/company_concept/snapshot/daily_bars)
+and `test_live_build.py` (materialize, asserting no partial cache dir on raise). Full gate:
+`458 passed, 2 skipped, 2 warnings in 102.35s`, 95.82% coverage, all clean — pasted into
+`docs/SHOWCASE.md` §1.

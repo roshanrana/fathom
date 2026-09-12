@@ -23,6 +23,7 @@ import pandas as pd
 
 from fathom.errors import Code, FathomError
 from fathom.live.http import LiveHttp
+from fathom.live.sec import _dict_field, _list_field
 
 _YAHOO_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=2y&interval=1d"
 _STOOQ_URL = "https://stooq.com/q/d/l/?s={symbol}.us&i=d"
@@ -97,10 +98,13 @@ class PriceClient:
         # becomes a plain source failure rather than an uncaught exception.
         try:
             payload = json.loads(body)
-            result = payload["chart"]["result"][0]
-            # T-023 attempt 2 F1: `result` may be a truthy non-dict (e.g. an error string); index
-            # [0] on a string succeeds via char-indexing, so validate the type explicitly rather
-            # than trusting the type-checker-only `cast`.
+            chart = _dict_field(payload, "chart")
+            results = _list_field(chart, "result")
+            result = results[0] if results else None
+            # T-023 attempt 2 F1 / T-024 attempt 3: `result` may be a truthy non-dict (e.g. an
+            # error string); index [0] on a string succeeds via char-indexing, and a `cast()` has
+            # no runtime effect, so validate the type explicitly with a typed accessor/isinstance
+            # check rather than trusting either.
             if not isinstance(result, dict):
                 raise TypeError("yahoo result is not a dict")
             frame = self._bars_from_yahoo(ticker, result)
@@ -111,21 +115,17 @@ class PriceClient:
         return frame
 
     def _bars_from_yahoo(self, ticker: str, result: dict[str, object]) -> pd.DataFrame:
-        timestamps = cast(list[int], result.get("timestamp") or [])
-        indicators = result.get("indicators") or {}
-        if not isinstance(indicators, dict):
-            raise TypeError("yahoo indicators is not a dict")
-        quote_list = indicators.get("quote") or []
-        if not isinstance(quote_list, list):
-            raise TypeError("yahoo quote is not a list")
+        timestamps = _list_field(result, "timestamp")
+        indicators = _dict_field(result, "indicators")
+        quote_list = _list_field(indicators, "quote")
         quote = quote_list[0] if quote_list else {}
         if not isinstance(quote, dict):
             raise TypeError("yahoo quote entry is not a dict")
-        opens = cast(list[object], quote.get("open") or [])
-        highs = cast(list[object], quote.get("high") or [])
-        lows = cast(list[object], quote.get("low") or [])
-        closes = cast(list[object], quote.get("close") or [])
-        volumes = cast(list[object], quote.get("volume") or [])
+        opens = _list_field(quote, "open")
+        highs = _list_field(quote, "high")
+        lows = _list_field(quote, "low")
+        closes = _list_field(quote, "close")
+        volumes = _list_field(quote, "volume")
 
         rows: list[dict[str, object]] = []
         for i, ts in enumerate(timestamps):
@@ -138,7 +138,13 @@ class PriceClient:
             rows.append(
                 {
                     "symbol": ticker,
-                    "date": datetime.fromtimestamp(ts, tz=UTC).date(),
+                    # `ts` is `object` at the type level (from `_list_field`); a non-numeric `ts`
+                    # was already let through by `_is_out_of_range_yahoo_timestamp` on purpose (a
+                    # non-numeric value should still hit `datetime.fromtimestamp` and raise, which
+                    # the whole-body guard above converts to a malformed-response error, not a
+                    # bare crash) — `cast` here only satisfies the type checker for the numeric
+                    # case, matching `_valid_close`/`_safe_float`/`_required_float` below.
+                    "date": datetime.fromtimestamp(cast(float, ts), tz=UTC).date(),
                     "open": _safe_float(opens, i),
                     "high": _safe_float(highs, i),
                     "low": _safe_float(lows, i),
