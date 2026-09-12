@@ -1,0 +1,33 @@
+{
+  "briefing_offline": {
+    "claims_total": 367,
+    "claims_verified": 367,
+    "tickers": 20,
+    "verified_share": 1.0
+  },
+  "filings": 97,
+  "guard": {
+    "adversarial": 33,
+    "benign": 12,
+    "escapes": 0,
+    "false_positives": 0
+  },
+  "injection": {
+    "passed": true
+  },
+  "parser": {
+    "coverage": 1.0,
+    "tenk_total": 20,
+    "tenk_with_1a_and_7": 20,
+    "tenq_total": 77,
+    "tenq_with_i2": 77
+  },
+  "retrieval": {
+    "golden_queries": 7,
+    "hit_rate": 0.7571,
+    "hits": 106,
+    "total": 140
+  },
+  "schema": "fathom-headline/1",
+  "universe": 20
+}

@@ -79,4 +79,37 @@ Gate wiring: append to `scripts/check.py` STEPS in this order: ("bench", ["fatho
 ## Threat-model boundary touched
 none (offline only)
 
+## Blocked
+- AC1 asks for `retrieval.hit_rate >= 0.9`. Measured against the real fixtures with the frozen
+  `fathom.retrieval.search` (top-1 chunk per (query, ticker), 7 golden queries x 20 tickers =
+  140), the honest value is **0.7571** (106/140), not >=0.9. Per-query breakdown: risk factors
+  17/20, results-of-operations-revenue 9/20, legal proceedings 18/20, cybersecurity 18/20,
+  liquidity-and-capital-resources 13/20, market-risk-interest-rate 11/20, controls-and-procedures
+  20/20. `retrieval.py` is out of this task's scope (already shipped and PASSed under T-003, not
+  in T-010's file list); improving BM25 ranking to hit >=0.9 would require touching it. There is
+  no dedicated NFR for retrieval hit-rate in `01-requirements.md` (only FR-015 mentions it as
+  bench content); NFR-004/007/008 — the ones T-010's tests are actually named after — don't
+  depend on this number. `bench.py` reports the true value; `tests/test_bench.py` asserts its
+  structure (7 queries, 140 total, 0<=hit_rate<=1) rather than a false `>=0.9`, and
+  `metrics/render.py` correctly marks that KPI "warn" (target 0.9) while everything else is
+  "pass". Needs an owner call: accept as a known gap (like the MCD parser deviation), or open a
+  follow-up task against `fathom/retrieval.py`/golden-query set.
+
 ## Handoff (Implementer fills, ≤10 lines)
+Implemented: `fathom/bench.py` (`run_bench(out=Path("metrics/headline.json"))`, `python -m
+fathom.bench` entry, GOLDEN_QUERIES/ADVERSARIAL_PHRASES/BENIGN_PHRASES) writes deterministic
+`headline.json` (sorted keys, 4dp floats) + gitignored `timing.json` (generated_at,
+briefing_offline.latency_ms_median, timing_ms) via its own temp audit dir, offline provider
+only. `metrics/render.py` (stdlib-only) writes card.json/card.md; `--check` drift-compares only
+the deterministic payload (ignores generated_at and the one timing-sourced KPI value) so two
+bench runs never false-positive on drift. `scripts/check.py`: appended bench/bench-drift/card-
+drift steps in order using `-m fathom.bench` per instructions. `.gitignore` already had
+`metrics/timing.json`; no edit needed.
+Files changed: fathom/bench.py (new), metrics/render.py + headline.json + card.json + card.md
+(new), scripts/check.py (STEPS +3), tests/test_bench.py (new, 16 tests).
+Tests: `uv run pytest tests/test_bench.py -q` -> 16 passed. Full gate `uv run python
+scripts/check.py` -> "all checks passed" (217 passed/1 skipped, 95.47% cov), run twice, stable.
+`python -m fathom.bench` run twice -> byte-identical headline.json.
+Deviation: retrieval.hit_rate measures 0.7571, not >=0.9 (real fixtures, frozen retrieval.py,
+out of scope) — see "## Blocked" above; reported honestly, not hardcoded.
+Budget actual: ~85 tool calls, well within 80k input tokens / 120 min.

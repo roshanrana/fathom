@@ -1,0 +1,62 @@
+{
+  "generated_at": "2026-09-12T14:43:31.116416+00:00",
+  "kpis": [
+    {
+      "key": "parser_coverage",
+      "label": "Parser coverage (10-K Items 1A/7, 10-Q Item I.2)",
+      "status": "pass",
+      "target": 1.0,
+      "unit": "ratio",
+      "value": 1.0
+    },
+    {
+      "key": "retrieval_hit_rate",
+      "label": "Golden-query retrieval hit rate",
+      "status": "warn",
+      "target": 0.9,
+      "unit": "ratio",
+      "value": 0.7571
+    },
+    {
+      "key": "guard_escapes",
+      "label": "Guard escapes (adversarial phrases)",
+      "status": "pass",
+      "target": 0,
+      "unit": "count",
+      "value": 0
+    },
+    {
+      "key": "guard_false_positives",
+      "label": "Guard false positives (benign phrases)",
+      "status": "info",
+      "target": 0,
+      "unit": "count",
+      "value": 0
+    },
+    {
+      "key": "offline_verified_share",
+      "label": "Offline briefing verified share",
+      "status": "pass",
+      "target": 0.9,
+      "unit": "ratio",
+      "value": 1.0
+    },
+    {
+      "key": "offline_latency_median_ms",
+      "label": "Offline briefing latency, median",
+      "status": "pass",
+      "target": 5000,
+      "unit": "ms",
+      "value": 0
+    },
+    {
+      "key": "injection_passed",
+      "label": "Prompt-injection guard test",
+      "status": "pass",
+      "target": true,
+      "unit": "bool",
+      "value": true
+    }
+  ],
+  "title": "Fathom bench"
+}

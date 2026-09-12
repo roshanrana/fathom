@@ -27,6 +27,9 @@ STEPS: list[tuple[str, list[str]]] = [
         ],
     ),
     ("secrets scan", [sys.executable, "scripts/secrets_scan.py"]),
+    ("bench", [sys.executable, "-m", "fathom.bench"]),
+    ("bench drift", ["git", "diff", "--exit-code", "--", "metrics/headline.json"]),
+    ("card drift", [sys.executable, "metrics/render.py", "--check"]),
 ]
 
 
