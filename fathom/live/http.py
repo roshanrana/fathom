@@ -65,39 +65,45 @@ class LiveHttp:
         self._throttle(urlparse(url).hostname or "")
 
         try:
-            response = self._client.get(
+            with self._client.stream(
+                "GET",
                 url,
                 headers={"User-Agent": self._user_agent, "Accept-Encoding": "gzip"},
-            )
+            ) as response:
+                if not (200 <= response.status_code < 300):
+                    raise FathomError(
+                        Code.SOURCE_HTTP,
+                        f"{source} returned status {response.status_code}",
+                        {
+                            "source": source,
+                            "status": response.status_code,
+                            "reason": response.reason_phrase or "",
+                        },
+                    )
+
+                buffer = bytearray()
+                for chunk in response.iter_bytes():
+                    buffer.extend(chunk)
+                    if len(buffer) > _MAX_BODY_BYTES:
+                        raise FathomError(
+                            Code.SOURCE_HTTP,
+                            f"{source} response exceeded the size cap",
+                            {
+                                "source": source,
+                                "status": response.status_code,
+                                "reason": "too large",
+                            },
+                        )
+                status = response.status_code
         except httpx.HTTPError as exc:
             raise FathomError(
                 Code.SOURCE_HTTP,
                 f"{source} request failed",
-                {"source": source, "status": 0, "reason": str(exc)},
+                {"source": source, "status": 0, "reason": type(exc).__name__},
             ) from exc
 
-        if not (200 <= response.status_code < 300):
-            raise FathomError(
-                Code.SOURCE_HTTP,
-                f"{source} returned status {response.status_code}",
-                {
-                    "source": source,
-                    "status": response.status_code,
-                    "reason": response.reason_phrase or "",
-                },
-            )
-
-        body = response.content
-        if len(body) > _MAX_BODY_BYTES:
-            raise FathomError(
-                Code.SOURCE_HTTP,
-                f"{source} response exceeded the size cap",
-                {"source": source, "status": response.status_code, "reason": "too large"},
-            )
-
-        self._write_cache(
-            cache_path, meta_path, body, url=url, status=response.status_code, source=source
-        )
+        body = bytes(buffer)
+        self._write_cache(cache_path, meta_path, body, url=url, status=status, source=source)
         return body
 
     def _throttle(self, host: str) -> None:

@@ -219,6 +219,70 @@ def test_fr025_body_over_25mb_rejected_as_too_large(tmp_path: Path) -> None:
     assert not cache_dir.exists() or list(cache_dir.iterdir()) == []
 
 
+def _counted_chunk_stream(total_bytes: int, counter: list[int], chunk_size: int = 1024 * 1024):
+    remaining = total_bytes
+    while remaining > 0:
+        n = min(chunk_size, remaining)
+        counter[0] += n
+        yield b"x" * n
+        remaining -= n
+
+
+def test_fr025_streamed_30mb_body_aborts_after_26mb_read_no_text_decode(
+    tmp_path: Path,
+) -> None:
+    read_bytes = [0]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=_counted_chunk_stream(30 * 1024 * 1024, read_bytes))
+
+    http, _ = _make_http(tmp_path, handler)
+
+    with pytest.raises(FathomError) as excinfo:
+        http.get("https://www.sec.gov/huge-stream", ttl_hours=None, source="sec")
+
+    err = excinfo.value
+    assert err.code == Code.SOURCE_HTTP
+    assert err.details["reason"] == "too large"
+    # Aborted well before the full 30 MB was pulled from the source stream.
+    assert read_bytes[0] <= 26 * 1024 * 1024
+
+
+def test_fr025_streamed_20mb_body_succeeds(tmp_path: Path) -> None:
+    read_bytes = [0]
+    total = 20 * 1024 * 1024
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=_counted_chunk_stream(total, read_bytes))
+
+    http, _ = _make_http(tmp_path, handler)
+
+    body = http.get("https://www.sec.gov/ok-stream", ttl_hours=None, source="sec")
+
+    assert len(body) == total
+    assert read_bytes[0] == total
+
+
+def test_fr025_transport_error_reason_is_exception_class_name_no_url(
+    tmp_path: Path,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("http://host/secret?x=1")
+
+    http, _ = _make_http(tmp_path, handler)
+
+    with pytest.raises(FathomError) as excinfo:
+        http.get("https://www.sec.gov/unreachable", ttl_hours=None, source="sec")
+
+    err = excinfo.value
+    assert err.code == Code.SOURCE_HTTP
+    assert err.details["reason"] == "ConnectError"
+    assert "secret" not in err.message
+    assert "secret" not in str(err.details)
+    assert "http://host" not in err.message
+    assert "http://host" not in str(err.details)
+
+
 def test_nfr013_user_agent_header_set_on_every_request(tmp_path: Path) -> None:
     seen_headers: list[str] = []
 

@@ -67,6 +67,29 @@ class SecFiling(BaseModel):
     url: str
 
 
+_ACCESSION_RE = re.compile(r"^\d{10}-\d{2}-\d{6}$")
+_SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$")
+
+
+def _invalid_edgar_field_error() -> FathomError:
+    """Build the SOURCE_HTTP error for a malformed EDGAR JSON field (never echoes the value)."""
+    return FathomError(
+        Code.SOURCE_HTTP,
+        "sec response contained an invalid edgar field",
+        {"source": "sec", "status": 0, "reason": "invalid edgar field"},
+    )
+
+
+def _validate_accession(accession: str) -> None:
+    if not _ACCESSION_RE.match(accession):
+        raise _invalid_edgar_field_error()
+
+
+def _validate_safe_name(name: str) -> None:
+    if ".." in name or not _SAFE_NAME_RE.match(name):
+        raise _invalid_edgar_field_error()
+
+
 def _document_url(cik: str, accession: str, primary_document: str) -> str:
     return (
         f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/"
@@ -192,6 +215,7 @@ class SecClient:
                 name = str(page.get("name", ""))
                 if not name:
                     continue
+                _validate_safe_name(name)
                 page_url = _SUBMISSIONS_PAGE_URL.format(name=name)
                 body = self._http.get(page_url, ttl_hours=_SUBMISSIONS_TTL_HOURS, source="sec")
                 page_table = cast(dict[str, list[object]], json.loads(body))
@@ -250,6 +274,8 @@ class SecClient:
         form = cast(Literal["10-K", "10-Q"], entry["form"])
         accession = str(entry["accessionNumber"])
         primary_document = str(entry["primaryDocument"])
+        _validate_accession(accession)
+        _validate_safe_name(primary_document)
         filing_date = _parse_date(str(entry.get("filingDate", "")))
         if filing_date is None:
             raise FathomError(

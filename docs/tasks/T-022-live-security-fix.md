@@ -51,3 +51,9 @@ exception class name only (`type(exc).__name__`), never `str(exc)`.
 B6 — fresh Security Reviewer at T2 confirms closure of T-018 F1–F3.
 
 ## Handoff (Implementer fills, ≤10 lines)
+- F1: added `_ACCESSION_RE`/`_SAFE_NAME_RE` + `_validate_accession`/`_validate_safe_name` in sec.py; called from `_to_filing` (accession, primary_document) and `filings()` older-pages loop (name), before any URL build. Failure raises SOURCE_HTTP reason "invalid edgar field", value never echoed.
+- F2: `LiveHttp.get` now uses `client.stream("GET", ...)`, accumulates a bytearray via `response.iter_bytes()`, and raises "too large" as soon as the running total exceeds 25 MB — before any `.content`/`.text` decode. Cache write unchanged (after full body assembled).
+- F3: transport-error branch now sets `details["reason"] = type(exc).__name__` instead of `str(exc)`.
+- No public signatures changed. Added tests: test_live_http.py (streamed 30 MB abort ≤26MB / 20 MB success / ConnectError reason+no-URL), test_live_sec.py (invalid accessionNumber / primaryDocument / older-page name, each asserting no leaked value).
+- Full gate green (`uv run python scripts/check.py`): 345 passed, ruff/mypy/secrets/bench/card all clean. Targeted suite: 35 passed.
+- Not verified by me (per instructions) — Verifier should re-run gate and confirm AC1-AC4 against docs/tasks/T-018.security.md F1-F3.

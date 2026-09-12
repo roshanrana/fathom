@@ -303,6 +303,117 @@ def test_fr021_filings_raises_source_empty_when_no_qualifying_filings(tmp_path: 
     assert excinfo.value.code == Code.SOURCE_EMPTY
 
 
+def test_fr021_filings_rejects_invalid_accession_number(tmp_path: Path) -> None:
+    submissions = {
+        "name": "Tampered Filer Inc",
+        "exchanges": [],
+        "sicDescription": None,
+        "fiscalYearEnd": None,
+        "filings": {
+            "recent": {
+                "form": ["10-K"],
+                "filingDate": ["2026-09-01"],
+                "reportDate": [""],
+                "accessionNumber": ["../../etc"],
+                "primaryDocument": ["k.htm"],
+            },
+            "files": [],
+        },
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url) == "https://data.sec.gov/submissions/CIK0000000002.json":
+            return httpx.Response(200, content=json.dumps(submissions).encode())
+        return httpx.Response(404)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    http = LiveHttp(cache_dir=tmp_path, user_agent="Fathom/0.1.0 (t@example.com)", client=client)
+    sec = SecClient(http=http, contact="t@example.com")
+
+    with pytest.raises(FathomError) as excinfo:
+        sec.filings("0000000002")
+
+    err = excinfo.value
+    assert err.code == Code.SOURCE_HTTP
+    assert err.details["reason"] == "invalid edgar field"
+    assert "../../etc" not in err.message
+    assert "../../etc" not in str(err.details)
+
+
+def test_fr021_filings_rejects_invalid_primary_document(tmp_path: Path) -> None:
+    submissions = {
+        "name": "Tampered Filer Inc",
+        "exchanges": [],
+        "sicDescription": None,
+        "fiscalYearEnd": None,
+        "filings": {
+            "recent": {
+                "form": ["10-K"],
+                "filingDate": ["2026-09-01"],
+                "reportDate": [""],
+                "accessionNumber": ["0000000003-26-000001"],
+                "primaryDocument": ["../x.htm"],
+            },
+            "files": [],
+        },
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url) == "https://data.sec.gov/submissions/CIK0000000003.json":
+            return httpx.Response(200, content=json.dumps(submissions).encode())
+        return httpx.Response(404)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    http = LiveHttp(cache_dir=tmp_path, user_agent="Fathom/0.1.0 (t@example.com)", client=client)
+    sec = SecClient(http=http, contact="t@example.com")
+
+    with pytest.raises(FathomError) as excinfo:
+        sec.filings("0000000003")
+
+    err = excinfo.value
+    assert err.code == Code.SOURCE_HTTP
+    assert err.details["reason"] == "invalid edgar field"
+    assert "../x.htm" not in err.message
+    assert "../x.htm" not in str(err.details)
+
+
+def test_fr021_filings_rejects_invalid_older_page_name(tmp_path: Path) -> None:
+    submissions = {
+        "name": "Sparse Tampered Filer Inc",
+        "exchanges": [],
+        "sicDescription": None,
+        "fiscalYearEnd": None,
+        "filings": {
+            "recent": {
+                "form": ["4"],
+                "filingDate": ["2026-09-01"],
+                "reportDate": [""],
+                "accessionNumber": ["0000000004-26-000001"],
+                "primaryDocument": ["form4.xml"],
+            },
+            "files": [{"name": "../../etc/passwd"}],
+        },
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url) == "https://data.sec.gov/submissions/CIK0000000004.json":
+            return httpx.Response(200, content=json.dumps(submissions).encode())
+        return httpx.Response(404)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    http = LiveHttp(cache_dir=tmp_path, user_agent="Fathom/0.1.0 (t@example.com)", client=client)
+    sec = SecClient(http=http, contact="t@example.com")
+
+    with pytest.raises(FathomError) as excinfo:
+        sec.filings("0000000004")
+
+    err = excinfo.value
+    assert err.code == Code.SOURCE_HTTP
+    assert err.details["reason"] == "invalid edgar field"
+    assert "../../etc/passwd" not in err.message
+    assert "../../etc/passwd" not in str(err.details)
+
+
 def test_fr021_company_concept_returns_parsed_json(tmp_path: Path) -> None:
     concept_body = b'{"units": {"USD": [{"val": 1, "end": "2026-06-30"}]}}'
 
