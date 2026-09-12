@@ -206,9 +206,13 @@ class PortkeyProvider:      name = "portkey"   # POST {base_url}/chat/completion
 class AnthropicProvider:    name = "anthropic" # POST https://api.anthropic.com/v1/messages with x-api-key, anthropic-version 2023-06-01; text = content[0].text; usage.input_tokens/output_tokens
 def make_provider(settings: Settings, client: httpx.Client | None = None) -> Provider
 ```
-Errors: non-2xx → `PROVIDER_HTTP` with `{"status", "provider"}` only; `httpx.TimeoutException` →
-`PROVIDER_TIMEOUT`; missing key → `PROVIDER_CONFIG` naming the variable, raised before any
-client is built. Logging: INFO `provider selected name=%s model=%s` only.
+Errors (D-010): non-2xx → `PROVIDER_HTTP` with `{"status", "provider"}` only; `httpx.TimeoutException`
+→ `PROVIDER_TIMEOUT`; any other `httpx.HTTPError` (connect refused, DNS, protocol errors) →
+`PROVIDER_HTTP` with `{"status": 0, "provider", "reason": <exception class name>}`; a 2xx body
+that is not JSON or lacks the expected keys/indices → `PROVIDER_HTTP` with `{"status": <code>,
+"provider", "reason": "malformed response"}` (never the body); missing key → `PROVIDER_CONFIG`
+naming the variable, raised before any client is built. No raw `httpx` or `KeyError`/`IndexError`
+escapes a provider. Logging: INFO `provider selected name=%s model=%s` only.
 
 ### 2.8 `guard.py`
 ```python

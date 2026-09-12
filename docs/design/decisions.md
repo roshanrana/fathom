@@ -141,3 +141,15 @@ briefing, documented in ASSUMPTIONS).
 Consequences: regression manifest expectation returns to "only MCD changes"; T-011's quoted
 figures are re-checked after attempt 2.
 Approver: Architecture lead (standing authorisation, D-000).
+
+## D-010 — Assurance finding: provider transport errors must be Fathom errors   (2026-09-12, phase 7, status: accepted)
+Context: The G7 resilience check (gateway unreachable: `PORTKEY_BASE_URL=http://127.0.0.1:9/v1`)
+produced a raw `httpx.ConnectError` from `fathom brief`, and the API would have answered a
+generic 500. LLD §2.7 only mapped timeouts and non-2xx responses. T-004's security review had
+also left the 2xx JSON-shape gap as an accepted candidate.
+Decision: LLD §2.7 amended — every `httpx.HTTPError` and every malformed 2xx body becomes
+`PROVIDER_HTTP` with a reason and no body; delivered by T-015 (risk medium, fresh security
+review), which also tidies the CLI rendering of guarded claims ("(no source)" instead of "? ? ?").
+Consequences: live-mode outages show `error PROVIDER_HTTP: … reason=ConnectError` and the
+runbook's fallback advice applies; the T-004 MEDIUM closes.
+Approver: Architecture lead (standing authorisation, D-000).
