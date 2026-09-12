@@ -58,3 +58,9 @@ latency_ms=%d`. Model/provider fields for the no-call paths: provider "guard"/"n
 B1 (advice elicitation, injection via question) — Security Reviewer at T2.
 
 ## Handoff (Implementer fills, ≤10 lines)
+- Implemented: `ask()` per LLD §2.10 — guard→retrieval→provider(+1 repair)→verify-against-full-section→scrub→audit→`Answer`; no-call paths audited provider "guard"/"none", model "-"; question text never logged/audited (only its sha256).
+- Files changed: `fathom/ask.py` (new), `tests/test_ask.py` (new, local `ScriptedProvider`/`FailingProvider` since `tests/fakes.py` did not exist yet).
+- Tests run: `uv run pytest tests/test_ask.py -q` → 7 passed. Full gate `uv run python scripts/check.py` → all checks passed (154 tests total, 97.59% coverage, ruff/mypy/format/secrets clean).
+- Deviations: none from spec. `_section_text_index` catches `FathomError` per-accession (unknown accession → verified False) rather than propagating, per §2.10's "unknown accession/section_id → verified False" rule.
+- Open questions: none.
+- Budget actual: in≈40k tokens, ~35 tool calls, well under 45 min wall clock.
