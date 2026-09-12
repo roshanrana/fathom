@@ -43,23 +43,39 @@ def load_frame(name: FixtureName, data_dir: Path) -> pd.DataFrame:
     return pd.read_parquet(path)
 
 
-def require_ticker(ticker: str, settings: Settings | None = None) -> str:
-    """Upper-case and validate a ticker (05-m4-live-data.md §5).
+def require_ticker(
+    ticker: str, settings: Settings | None = None, data_dir: Path | None = None
+) -> str:
+    """Upper-case and validate a ticker (05-m4-live-data.md §5, amended after T-020 attempt 1).
 
-    Fixture mode (`settings` is `None` or `settings.data_source == "fixture"`): unchanged,
-    validated against the fixed `UNIVERSE`. Live mode: only the shape
-    `^[A-Z][A-Z0-9.\\-]{0,9}$` is checked here; actual existence is deferred to
-    `SecClient.lookup` when the ticker is materialized.
+    The shape `^[A-Z][A-Z0-9.\\-]{0,9}$` is checked first, in every mode, before any path is
+    built (B1/B6 control). Then: when `data_dir` is given, existence is checked against that
+    directory's `companies.parquet` (fixture directories and live caches behave the same way).
+    When `data_dir` is `None` and `settings` is fixture mode or `None`, existence is checked
+    against the fixed `UNIVERSE`. When `data_dir` is `None` and `settings` is live, only the
+    shape is checked here; existence is deferred to `SecClient.lookup` when materialized.
     """
     upper = ticker.upper()
-    if settings is not None and settings.data_source == "live":
-        if not _LIVE_TICKER_RE.match(upper):
+    if not _LIVE_TICKER_RE.match(upper):
+        raise FathomError(
+            Code.UNKNOWN_TICKER,
+            f"invalid ticker format {upper!r}",
+            {"ticker": upper},
+        )
+
+    if data_dir is not None:
+        frame = load_frame("companies", data_dir)
+        if upper not in set(frame["ticker"]):
             raise FathomError(
                 Code.UNKNOWN_TICKER,
-                f"invalid ticker format {upper!r}",
+                f"unknown ticker {upper!r} in {data_dir}",
                 {"ticker": upper},
             )
         return upper
+
+    if settings is not None and settings.data_source == "live":
+        return upper
+
     if upper not in UNIVERSE:
         raise FathomError(
             Code.UNKNOWN_TICKER,
@@ -71,7 +87,7 @@ def require_ticker(ticker: str, settings: Settings | None = None) -> str:
 
 def company(ticker: str, data_dir: Path) -> Company:
     """Look up a company's master record from `companies.parquet`."""
-    symbol = require_ticker(ticker)
+    symbol = require_ticker(ticker, data_dir=data_dir)
     frame = load_frame("companies", data_dir)
     rows = frame[frame["ticker"] == symbol]
     if rows.empty:

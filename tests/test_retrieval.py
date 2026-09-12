@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from fathom.filings import Section
 from fathom.retrieval import (
     BM25Index,
@@ -181,6 +183,47 @@ def test_fr009_index_for_is_cached_and_covers_all_sections(data_dir: Path) -> No
 
     assert first is second
     assert len(first.chunks) > 100
+
+
+def test_fr020_ac8_index_for_data_dir_existence_check(tmp_path: Path) -> None:
+    """`index_for` delegates to `filings_for`, so a `data_dir`-scoped ticker check applies here
+    too: a ticker absent from `data_dir`'s `companies.parquet` raises `UNKNOWN_TICKER`, even
+    though it is not a direct `require_ticker` call site."""
+    import pandas as pd
+
+    from fathom.errors import Code, FathomError
+
+    frame = pd.DataFrame(
+        {
+            "ticker": ["NFLX"],
+            "cik": ["0001065280"],
+            "company_name": ["Netflix, Inc."],
+            "form": ["10-K"],
+            "filing_date": [pd.Timestamp("2026-01-01").date()],
+            "accession": ["0001065280-26-000001"],
+            "text": ["Item 1A. Risk Factors\nSome risk text about liquidity."],
+            "n_chars": [40],
+        }
+    )
+    companies = pd.DataFrame(
+        {
+            "ticker": ["NFLX"],
+            "long_name": ["Netflix, Inc."],
+            "full_exchange_name": [""],
+            "sector": [""],
+            "industry": [""],
+            "website": [""],
+        }
+    )
+    frame.to_parquet(tmp_path / "filings.parquet")
+    companies.to_parquet(tmp_path / "companies.parquet")
+
+    index = index_for("NFLX", tmp_path)
+    assert len(index.chunks) >= 1
+
+    with pytest.raises(FathomError) as exc_info:
+        index_for("AAPL", tmp_path)
+    assert exc_info.value.code == Code.UNKNOWN_TICKER
 
 
 # --- AC8 (D-008): section-title tokens are part of the indexed token stream --------------------

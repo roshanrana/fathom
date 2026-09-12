@@ -322,3 +322,56 @@ def test_fr020_ac6_source_http_from_data_dir_for_renders_as_error(
     assert not at.exception
     error_values = [e.value for e in at.error]
     assert any("SOURCE_HTTP" in value for value in error_values)
+
+
+# --- AC8 (attempt 2): a non-fixture ticker (NFLX) succeeds end to end on the page --------------
+
+
+def _prepared_nflx_cache_dir(tmp_path: Path) -> Path:
+    """A live-cache-shaped dir for NFLX, relabeled from the real AAPL fixtures (never touches
+    `data/`)."""
+    import json
+
+    import pandas as pd
+
+    live_dir = tmp_path / "live_cache" / "NFLX"
+    live_dir.mkdir(parents=True)
+    for name, column in (
+        ("companies", "ticker"),
+        ("bars", "symbol"),
+        ("quotes", "symbol"),
+        ("filings", "ticker"),
+    ):
+        frame = pd.read_parquet(REPO_ROOT / "data" / f"{name}.parquet")
+        frame = frame[frame[column] == "AAPL"].assign(**{column: "NFLX"})
+        frame.to_parquet(live_dir / f"{name}.parquet", index=False)
+    (live_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "fetched_at": "2026-09-01T12:34:56+00:00",
+                "bars_source": "yahoo via .cache/live/NFLX/bars.parquet",
+                "snapshot_source": "SEC XBRL companyconcept (shares, EPS TTM, equity, DPS TTM)"
+                " × yahoo close",
+            }
+        ),
+        encoding="utf-8",
+    )
+    return live_dir
+
+
+def test_fr020_ac8_live_mode_nflx_non_universe_ticker_succeeds(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import fathom.live as live_module
+
+    nflx_dir = _prepared_nflx_cache_dir(tmp_path)
+    monkeypatch.setattr(live_module, "data_dir_for", lambda ticker, settings: nflx_dir)
+    _set_live_app_env(monkeypatch, tmp_path)
+
+    at = AppTest.from_file(APP_PATH, default_timeout=120).run()
+    at = at.sidebar.text_input[0].input("NFLX").run()
+
+    assert not at.exception
+    assert at.header[0].value
+    caption_values = [c.value for c in at.caption]
+    assert any("source: live" in c for c in caption_values), caption_values

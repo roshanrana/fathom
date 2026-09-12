@@ -346,3 +346,147 @@ def test_fr020_quote_source_live_routes_through_injected_mock_transport(
     QuoteCard.model_validate(body["data"])
     assert body["data"]["source"].endswith(".cache/live/AAPL/bars.parquet")
     assert len(calls) > 0
+
+
+# --- AC8 (attempt 2): a non-fixture ticker (NFLX) succeeds via ?source=live; status mapping -----
+
+_NFLX_CIK = "0001065280"
+
+
+def _live_handler_with_nflx() -> Callable[[httpx.Request], httpx.Response]:
+    """Like `_live_handler`, but the ticker map also resolves NFLX (absent from `UNIVERSE`).
+
+    NFLX's submissions/documents/facts/bars are served from the same AAPL fixtures (matched by
+    URL suffix, not by CIK/ticker) -- enough to exercise the non-fixture-universe path end to end.
+    """
+    import json
+
+    base = _live_handler()
+    tickers = json.loads((_LIVE_FIXTURES / "company_tickers.json").read_text())
+    tickers["5"] = {"cik_str": 1065280, "ticker": "NFLX", "title": "Netflix, Inc."}
+    company_tickers = json.dumps(tickers).encode()
+    submissions = (_LIVE_FIXTURES / "aapl_submissions.json").read_bytes()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if url == "https://www.sec.gov/files/company_tickers.json":
+            return httpx.Response(200, content=company_tickers)
+        if url == f"https://data.sec.gov/submissions/CIK{_NFLX_CIK}.json":
+            return httpx.Response(200, content=submissions)
+        return base(request)
+
+    return handler
+
+
+def test_fr020_ac8_quote_source_live_nflx_non_universe_ticker_succeeds(
+    data_dir: Path, tmp_path: Path
+) -> None:
+    from fathom.live.http import LiveHttp
+
+    transport_client = httpx.Client(transport=httpx.MockTransport(_live_handler_with_nflx()))
+    http = LiveHttp(
+        cache_dir=tmp_path / "live",
+        user_agent="Fathom/0.1.0 (t@example.com)",
+        client=transport_client,
+    )
+    settings = _settings(
+        data_dir, tmp_path, sec_contact="t@example.com", live_cache_dir=tmp_path / "live"
+    )
+    client = TestClient(create_app(settings, http=http))
+
+    response = client.get("/api/quote/NFLX?source=live")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["meta"]["source"] == "live"
+    QuoteCard.model_validate(body["data"])
+    assert body["data"]["ticker"] == "NFLX"
+
+
+def test_fr020_ac8_quote_source_fixture_nflx_still_returns_404_unknown_ticker(
+    data_dir: Path, tmp_path: Path
+) -> None:
+    client = _client(data_dir, tmp_path)
+
+    response = client.get("/api/quote/NFLX?source=fixture")
+
+    assert response.status_code == 404
+    body = response.json()
+    assert body["ok"] is False
+    assert body["error"]["code"] == "UNKNOWN_TICKER"
+
+
+def test_fr020_ac8_source_config_missing_contact_returns_503(
+    data_dir: Path, tmp_path: Path
+) -> None:
+    settings = _settings(data_dir, tmp_path, sec_contact=None, live_cache_dir=tmp_path / "live")
+    client = TestClient(create_app(settings))
+
+    response = client.get("/api/quote/AAPL?source=live")
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "SOURCE_CONFIG"
+
+
+def test_fr020_ac8_source_http_from_failing_transport_returns_502(
+    data_dir: Path, tmp_path: Path
+) -> None:
+    from fathom.live.http import LiveHttp
+
+    def failing_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, content=b"internal error")
+
+    transport_client = httpx.Client(transport=httpx.MockTransport(failing_handler))
+    http = LiveHttp(
+        cache_dir=tmp_path / "live",
+        user_agent="Fathom/0.1.0 (t@example.com)",
+        client=transport_client,
+    )
+    settings = _settings(
+        data_dir, tmp_path, sec_contact="t@example.com", live_cache_dir=tmp_path / "live"
+    )
+    client = TestClient(create_app(settings, http=http))
+
+    response = client.get("/api/quote/AAPL?source=live")
+
+    assert response.status_code == 502
+    assert response.json()["error"]["code"] == "SOURCE_HTTP"
+
+
+def test_fr020_ac8_source_empty_no_qualifying_filings_returns_404(
+    data_dir: Path, tmp_path: Path
+) -> None:
+    import json
+
+    from fathom.live.http import LiveHttp
+
+    company_tickers = (_LIVE_FIXTURES / "company_tickers.json").read_bytes()
+    submissions = json.loads((_LIVE_FIXTURES / "aapl_submissions.json").read_text())
+    submissions["filings"]["recent"] = {key: [] for key in submissions["filings"]["recent"]}
+    submissions["filings"]["files"] = []
+    empty_submissions = json.dumps(submissions).encode()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if url == "https://www.sec.gov/files/company_tickers.json":
+            return httpx.Response(200, content=company_tickers)
+        if url == "https://data.sec.gov/submissions/CIK0000320193.json":
+            return httpx.Response(200, content=empty_submissions)
+        return httpx.Response(404)
+
+    transport_client = httpx.Client(transport=httpx.MockTransport(handler))
+    http = LiveHttp(
+        cache_dir=tmp_path / "live",
+        user_agent="Fathom/0.1.0 (t@example.com)",
+        client=transport_client,
+    )
+    settings = _settings(
+        data_dir, tmp_path, sec_contact="t@example.com", live_cache_dir=tmp_path / "live"
+    )
+    client = TestClient(create_app(settings, http=http))
+
+    response = client.get("/api/quote/AAPL?source=live")
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "SOURCE_EMPTY"

@@ -178,3 +178,58 @@ def test_fr020_get_quote_source_default_none_uses_env_settings() -> None:
     payload = mcp_server.get_quote("AAPL")
 
     QuoteCard.model_validate_json(payload)
+
+
+# --- AC8 (attempt 2): a non-fixture ticker (NFLX) succeeds via source="live" --------------------
+
+
+def _nflx_cache_dir(data_dir: Path, tmp_path: Path) -> Path:
+    """A live-cache-shaped dir for NFLX, relabeled from the real AAPL fixtures."""
+    import pandas as pd
+
+    live_dir = tmp_path / "live_cache" / "NFLX"
+    live_dir.mkdir(parents=True)
+    for name, column in (
+        ("companies", "ticker"),
+        ("bars", "symbol"),
+        ("quotes", "symbol"),
+        ("filings", "ticker"),
+    ):
+        frame = pd.read_parquet(data_dir / f"{name}.parquet")
+        frame = frame[frame[column] == "AAPL"].assign(**{column: "NFLX"})
+        frame.to_parquet(live_dir / f"{name}.parquet", index=False)
+    return live_dir
+
+
+def test_fr020_ac8_get_quote_source_live_nflx_non_universe_ticker_succeeds(
+    monkeypatch: pytest.MonkeyPatch, data_dir: Path, tmp_path: Path
+) -> None:
+    nflx_dir = _nflx_cache_dir(data_dir, tmp_path)
+    monkeypatch.setattr(mcp_server, "data_dir_for", lambda ticker, settings: nflx_dir)
+
+    payload = mcp_server.get_quote("NFLX", source="live")
+
+    card = QuoteCard.model_validate_json(payload)
+    assert card.ticker == "NFLX"
+
+
+def test_fr020_ac8_list_filings_source_live_nflx_non_universe_ticker_succeeds(
+    monkeypatch: pytest.MonkeyPatch, data_dir: Path, tmp_path: Path
+) -> None:
+    nflx_dir = _nflx_cache_dir(data_dir, tmp_path)
+    monkeypatch.setattr(mcp_server, "data_dir_for", lambda ticker, settings: nflx_dir)
+
+    payload = mcp_server.list_filings("NFLX", source="live")
+
+    rows = json.loads(payload)
+    assert len(rows) == 5
+    for row in rows:
+        Filing.model_validate(row)
+
+
+def test_fr020_ac8_get_quote_fixture_mode_nflx_still_unknown_ticker() -> None:
+    payload = mcp_server.get_quote("NFLX")
+
+    body = json.loads(payload)
+    assert body["ok"] is False
+    assert body["error"]["code"] == "UNKNOWN_TICKER"

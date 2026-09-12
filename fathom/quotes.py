@@ -141,7 +141,7 @@ def _snapshot_for(
 
 def quote_card(ticker: str, data_dir: Path) -> QuoteCard:
     """Build a `QuoteCard` for `ticker`, hand-reproducible from the fixtures."""
-    symbol = require_ticker(ticker)
+    symbol = require_ticker(ticker, data_dir=data_dir)
     frame = _bars_for(symbol, data_dir)
 
     as_of: date = frame["date"].iloc[-1]

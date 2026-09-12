@@ -64,6 +64,42 @@ def test_fr004_filings_for_lists_aapl_newest_first(data_dir: Path) -> None:
     assert ten_k.period_end == date(2025, 9, 27)
 
 
+def test_fr020_ac8_filings_for_data_dir_existence_check(tmp_path: Path) -> None:
+    """`filings_for` validates existence against its own `data_dir`, not the fixed `UNIVERSE`."""
+    frame = pd.DataFrame(
+        {
+            "ticker": ["NFLX"],
+            "cik": ["0001065280"],
+            "company_name": ["Netflix, Inc."],
+            "form": ["10-K"],
+            "filing_date": [date(2026, 1, 1)],
+            "accession": ["0001065280-26-000001"],
+            "text": ["Item 1A. Risk Factors\nSome risk text."],
+            "n_chars": [30],
+        }
+    )
+    companies = pd.DataFrame(
+        {
+            "ticker": ["NFLX"],
+            "long_name": ["Netflix, Inc."],
+            "full_exchange_name": [""],
+            "sector": [""],
+            "industry": [""],
+            "website": [""],
+        }
+    )
+    frame.to_parquet(tmp_path / "filings.parquet")
+    companies.to_parquet(tmp_path / "companies.parquet")
+
+    rows = filings_for("nflx", tmp_path)
+    assert len(rows) == 1
+    assert rows[0].ticker == "NFLX"
+
+    with pytest.raises(FathomError) as exc_info:
+        filings_for("AAPL", tmp_path)
+    assert exc_info.value.code == Code.UNKNOWN_TICKER
+
+
 def test_fr004_filings_for_unknown_ticker_raises(data_dir: Path) -> None:
     """filings_for raises UNKNOWN_TICKER for a ticker outside the universe."""
     with pytest.raises(FathomError) as exc_info:

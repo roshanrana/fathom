@@ -36,6 +36,9 @@ _STATUS_BY_CODE: dict[Code, int] = {
     Code.PROVIDER_HTTP: 502,
     Code.PROVIDER_TIMEOUT: 502,
     Code.CONTRACT_INVALID: 502,
+    Code.SOURCE_CONFIG: 503,
+    Code.SOURCE_HTTP: 502,
+    Code.SOURCE_EMPTY: 404,
 }
 _INTERNAL_ERROR: dict[str, str] = {"code": "INTERNAL", "message": "internal error"}
 _VALIDATION_ERROR: dict[str, str] = {"code": "VALIDATION", "message": "invalid request"}

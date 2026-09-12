@@ -305,3 +305,90 @@ def test_fr020_ac3_end_to_end_offline_on_materialized_cache(tmp_path: Path) -> N
 
     answer = ask("AAPL", "What are the main risk factors?", settings, provider=None)
     assert answer.ticker == "AAPL"
+
+
+# --- AC8 (attempt 2): a non-fixture ticker (NFLX) succeeds end to end in live mode -------------
+
+_NFLX_CIK = "0001065280"
+
+
+def _nflx_handler(request: httpx.Request) -> httpx.Response:
+    """Like `_default_handler`, but the ticker map also resolves NFLX (absent from `UNIVERSE`).
+
+    NFLX's submissions/documents/facts/bars are served from the same AAPL fixtures (the SEC
+    endpoints are matched by URL suffix, not by CIK/ticker), which is enough to exercise the
+    non-fixture-universe code path end to end without a second full fixture set.
+    """
+    url = str(request.url)
+    if url == "https://www.sec.gov/files/company_tickers.json":
+        tickers = json.loads(_COMPANY_TICKERS.decode())
+        tickers["5"] = {"cik_str": 1065280, "ticker": "NFLX", "title": "Netflix, Inc."}
+        return httpx.Response(200, content=json.dumps(tickers).encode())
+    if url == f"https://data.sec.gov/submissions/CIK{_NFLX_CIK}.json":
+        return httpx.Response(200, content=_AAPL_SUBMISSIONS)
+    return _default_handler(request)
+
+
+def test_fr020_ac8_materialize_nflx_non_universe_ticker_succeeds(tmp_path: Path) -> None:
+    http, _ = _make_http(tmp_path, _nflx_handler)
+    settings = _settings(tmp_path, llm_provider="offline")
+
+    manifest = materialize("NFLX", settings, http=http)
+
+    assert manifest.ticker == "NFLX"
+    assert manifest.cik == _NFLX_CIK
+    live_dir = Path(manifest.data_dir)
+    assert live_dir == tmp_path / "live" / "NFLX"
+
+    card = quote_card("NFLX", live_dir)
+    assert card.ticker == "NFLX"
+
+    filings = filings_for("NFLX", live_dir)
+    assert len(filings) == 5
+
+    briefing = brief("NFLX", settings, provider=None)
+    assert briefing.ticker == "NFLX"
+
+    answer = ask("NFLX", "What are the main risk factors?", settings, provider=None)
+    assert answer.ticker == "NFLX"
+
+
+def test_fr020_ac8_fixture_mode_nflx_still_raises_unknown_ticker(tmp_path: Path) -> None:
+    """A fixture-mode call with NFLX still raises `UNKNOWN_TICKER` (fixture mode unchanged)."""
+    from fathom.data import require_ticker
+
+    settings = _settings(tmp_path, data_source="fixture")
+    with pytest.raises(FathomError) as excinfo:
+        require_ticker("NFLX", settings)
+    assert excinfo.value.code == Code.UNKNOWN_TICKER
+
+
+def test_fr020_ac8_materialize_path_traversal_rejected_before_any_path_built(
+    tmp_path: Path,
+) -> None:
+    """`materialize("../x", ...)` raises before the cache root is even created."""
+    settings = _settings(tmp_path)
+
+    with pytest.raises(FathomError) as excinfo:
+        materialize("../x", settings)
+
+    assert excinfo.value.code == Code.UNKNOWN_TICKER
+    assert not (tmp_path / "live").exists()
+
+
+# --- NFR-012: cold-materialize elapsed time (informational, not gated) -------------------------
+
+
+def test_nfr012_cold_materialize_elapsed_time_is_recorded(tmp_path: Path) -> None:
+    import time
+
+    http, _ = _make_http(tmp_path)
+    settings = _settings(tmp_path)
+
+    start = time.perf_counter()
+    materialize("AAPL", settings, http=http)
+    elapsed = time.perf_counter() - start
+
+    # Informational only (NFR-012 measures real cold starts); a mocked call is not gated on a
+    # tight bound, only sanity-checked against the 30s live budget so a runaway loop would fail.
+    assert elapsed < 30.0

@@ -84,8 +84,19 @@ def test_fr002_snapshot_nan_field_becomes_none(tmp_path: Path) -> None:
             "dividend_yield": [0.5],
         }
     )
+    companies = pd.DataFrame(
+        {
+            "ticker": ["AAPL"],
+            "long_name": ["Apple Inc."],
+            "full_exchange_name": ["NASDAQ"],
+            "sector": ["Technology"],
+            "industry": ["Technology"],
+            "website": [""],
+        }
+    )
     bars.to_parquet(tmp_path / "bars.parquet")
     quotes.to_parquet(tmp_path / "quotes.parquet")
+    companies.to_parquet(tmp_path / "companies.parquet")
 
     card = quote_card("AAPL", tmp_path)
 

@@ -70,3 +70,10 @@ back to fixture constants — no schema change to `quotes.parquet`.
 empty-bars now raises `SOURCE_HTTP` not `SOURCE_EMPTY` (see test_live_build.py note) — my
 `bars.empty` guard in `materialize` is now defensive dead code, left in place, harmless.
 Gate green (385 tests, 95.67% cov, mypy x2, ruff, secrets, bench, card drift), no network.
+
+Attempt 2: `quote_card`/`filings_for`/`build_context`/`data.company` pass `data_dir=` to
+`require_ticker` (checked against that dir's `companies.parquet`; `retrieval`/`ask` inherit via
+`filings_for`); it shape-checks first always, and `materialize` calls it before building any
+path (F1: `"../x"` raises before any dir is created). Added `SOURCE_CONFIG/HTTP/EMPTY` ->
+503/502/404 in `api.py` (F2), `test_nfr012_*`, and AC8 tests: mocked NFLX (non-UNIVERSE) works
+end to end (MockTransport/prepared-cache) on every surface. Gate green (415 tests, 95.65%).

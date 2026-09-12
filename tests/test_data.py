@@ -117,3 +117,61 @@ def test_fr020_data_dir_for_live_mode_returns_ticker_cache_dir(
     result = data_dir_for("AAPL", settings)
 
     assert result == tmp_path / "live" / "AAPL"
+
+
+# --- AC8 (attempt 2): require_ticker(..., data_dir=...) existence check + path-traversal ------
+
+
+def test_fr020_ac8_require_ticker_with_data_dir_checks_existence_there(data_dir: Path) -> None:
+    """A `data_dir` argument checks existence against *that* directory's `companies.parquet`."""
+    assert require_ticker("aapl", data_dir=data_dir) == "AAPL"
+    with pytest.raises(FathomError) as excinfo:
+        require_ticker("ZZZZ", data_dir=data_dir)
+    assert excinfo.value.code == Code.UNKNOWN_TICKER
+
+
+def test_fr020_ac8_require_ticker_data_dir_overrides_universe(tmp_path: Path) -> None:
+    """A live-cache-shaped `data_dir` listing only NFLX accepts NFLX and rejects AAPL."""
+    import pandas as pd
+
+    live_dir = tmp_path / "live" / "NFLX"
+    live_dir.mkdir(parents=True)
+    pd.DataFrame(
+        [
+            {
+                "ticker": "NFLX",
+                "long_name": "Netflix, Inc.",
+                "full_exchange_name": "",
+                "sector": "",
+                "industry": "",
+                "website": "",
+            }
+        ]
+    ).to_parquet(live_dir / "companies.parquet", index=False)
+
+    assert require_ticker("nflx", data_dir=live_dir) == "NFLX"
+    with pytest.raises(FathomError) as excinfo:
+        require_ticker("AAPL", data_dir=live_dir)
+    assert excinfo.value.code == Code.UNKNOWN_TICKER
+
+
+def test_fr020_ac8_require_ticker_path_traversal_rejected_before_data_dir_lookup() -> None:
+    """A traversal-shaped ticker fails the shape check before any `data_dir` is touched."""
+    with pytest.raises(FathomError) as excinfo:
+        require_ticker("../x", data_dir=Path("/does/not/exist"))
+    assert excinfo.value.code == Code.UNKNOWN_TICKER
+
+
+def test_fr020_ac8_data_dir_for_path_traversal_rejected_before_any_path_built(
+    tmp_path: Path,
+) -> None:
+    """`data_dir_for` (via `materialize`) raises before creating anything under the cache root."""
+    settings = Settings(
+        data_source="live", sec_contact="t@example.com", live_cache_dir=tmp_path / "live"
+    )
+
+    with pytest.raises(FathomError) as excinfo:
+        data_dir_for("../x", settings)
+
+    assert excinfo.value.code == Code.UNKNOWN_TICKER
+    assert not (tmp_path / "live").exists()

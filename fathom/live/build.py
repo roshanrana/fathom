@@ -20,6 +20,7 @@ from pydantic import BaseModel, ValidationError
 
 from fathom import __version__
 from fathom.config import Settings
+from fathom.data import require_ticker
 from fathom.errors import Code, FathomError
 from fathom.filings import parse_sections
 from fathom.live.facts import snapshot as compute_snapshot
@@ -126,7 +127,7 @@ def materialize(
     `force=True` bypasses the manifest TTL check and always recomputes. `http`/`clock` are
     test seams: production callers leave both at their defaults.
     """
-    symbol = ticker.upper()
+    symbol = require_ticker(ticker, settings)
     live_dir = settings.live_cache_dir / symbol
     manifest_path = live_dir / "manifest.json"
 

@@ -325,3 +325,124 @@ def test_fr024_fetch_command_propagates_source_config_error(
 
     assert result.exit_code == 2
     assert "error SOURCE_CONFIG:" in result.output
+
+
+# --- AC8 (attempt 2): a non-fixture ticker (NFLX) succeeds end to end on every CLI surface ------
+
+
+def _nflx_cache_dir(data_dir: Path, tmp_path: Path) -> Path:
+    """A live-cache-shaped dir for NFLX, relabeled from the real AAPL fixtures."""
+    import pandas as pd
+
+    live_dir = tmp_path / "live_cache" / "NFLX"
+    live_dir.mkdir(parents=True)
+    for name, column in (
+        ("companies", "ticker"),
+        ("bars", "symbol"),
+        ("quotes", "symbol"),
+        ("filings", "ticker"),
+    ):
+        frame = pd.read_parquet(data_dir / f"{name}.parquet")
+        frame = frame[frame[column] == "AAPL"].assign(**{column: "NFLX"})
+        frame.to_parquet(live_dir / f"{name}.parquet", index=False)
+    return live_dir
+
+
+def test_fr020_ac8_quote_source_live_nflx_non_universe_ticker_succeeds(
+    monkeypatch: pytest.MonkeyPatch, data_dir: Path, tmp_path: Path
+) -> None:
+    import fathom.cli as cli_module
+
+    nflx_dir = _nflx_cache_dir(data_dir, tmp_path)
+    monkeypatch.setattr(cli_module, "data_dir_for", lambda ticker, settings: nflx_dir)
+    monkeypatch.setenv("FATHOM_SEC_CONTACT", "t@example.com")
+
+    result = runner.invoke(app, ["quote", "NFLX", "--source", "live"])
+
+    assert result.exit_code == 0
+    assert "NFLX" in result.stdout
+
+
+def test_fr020_ac8_filings_source_live_nflx_non_universe_ticker_succeeds(
+    monkeypatch: pytest.MonkeyPatch, data_dir: Path, tmp_path: Path
+) -> None:
+    import fathom.cli as cli_module
+
+    nflx_dir = _nflx_cache_dir(data_dir, tmp_path)
+    monkeypatch.setattr(cli_module, "data_dir_for", lambda ticker, settings: nflx_dir)
+    monkeypatch.setenv("FATHOM_SEC_CONTACT", "t@example.com")
+
+    result = runner.invoke(app, ["filings", "NFLX", "--source", "live"])
+
+    assert result.exit_code == 0
+    assert "10-K" in result.stdout or "10-Q" in result.stdout
+
+
+def test_fr024_ac8_fetch_command_nflx_non_universe_ticker_succeeds(
+    monkeypatch: pytest.MonkeyPatch, data_dir: Path, tmp_path: Path
+) -> None:
+    import fathom.cli as cli_module
+    from fathom.live.build import LiveManifest
+
+    nflx_dir = _nflx_cache_dir(data_dir, tmp_path)
+    fake_manifest = LiveManifest(
+        ticker="NFLX",
+        cik="0001065280",
+        fetched_at="2026-09-01T00:00:00+00:00",
+        data_dir=str(nflx_dir),
+        filings=[],
+        bars_source="yahoo via .cache/live/NFLX/bars.parquet",
+        bars_from="2025-09-01",
+        bars_to="2026-09-01",
+        snapshot_source="SEC XBRL companyconcept (shares, EPS TTM, equity, DPS TTM) x yahoo close",
+        sections_coverage={},
+    )
+
+    def fake_materialize(ticker: str, settings: object, force: bool = False) -> LiveManifest:
+        return fake_manifest
+
+    monkeypatch.setattr(cli_module, "materialize", fake_materialize)
+
+    result = runner.invoke(app, ["fetch", "NFLX"])
+
+    assert result.exit_code == 0
+    assert "NFLX" in result.stdout
+    assert "cik=0001065280" in result.stdout
+
+
+def test_fr020_ac8_brief_source_live_nflx_non_universe_ticker_succeeds(
+    monkeypatch: pytest.MonkeyPatch, data_dir: Path, tmp_path: Path
+) -> None:
+    import fathom.briefing as briefing_module
+
+    nflx_dir = _nflx_cache_dir(data_dir, tmp_path)
+    monkeypatch.setattr(briefing_module, "data_dir_for", lambda ticker, settings: nflx_dir)
+    monkeypatch.setenv("FATHOM_SEC_CONTACT", "t@example.com")
+
+    result = runner.invoke(app, ["brief", "NFLX", "--source", "live", "--json"])
+
+    assert result.exit_code == 0
+    Briefing.model_validate_json(result.stdout)
+
+
+def test_fr020_ac8_ask_source_live_nflx_non_universe_ticker_succeeds(
+    monkeypatch: pytest.MonkeyPatch, data_dir: Path, tmp_path: Path
+) -> None:
+    import fathom.ask as ask_module
+
+    nflx_dir = _nflx_cache_dir(data_dir, tmp_path)
+    monkeypatch.setattr(ask_module, "data_dir_for", lambda ticker, settings: nflx_dir)
+    monkeypatch.setenv("FATHOM_SEC_CONTACT", "t@example.com")
+
+    result = runner.invoke(app, ["ask", "NFLX", "main risk factors", "--source", "live", "--json"])
+
+    assert result.exit_code == 0
+    Answer.model_validate_json(result.stdout)
+
+
+def test_fr020_ac8_quote_fixture_mode_nflx_still_unknown_ticker() -> None:
+    """A fixture-mode call with NFLX still raises UNKNOWN_TICKER (fixture mode unchanged)."""
+    result = runner.invoke(app, ["quote", "NFLX", "--source", "fixture"])
+
+    assert result.exit_code == 2
+    assert "error UNKNOWN_TICKER:" in result.output
