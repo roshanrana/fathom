@@ -11,7 +11,7 @@ is quoted or summarised underneath it — nothing here is typed in from memory.
 uv run python scripts/check.py
 ```
 > Ran ruff lint/format, mypy strict (host and `--platform linux`), pytest, the secrets scan,
-> `fathom bench`, bench drift and card drift: **287 passed, 96.02% coverage, all checks passed.**
+> `fathom bench`, bench drift and card drift: **458 passed, 2 skipped, 2 warnings in 102.35s, 95.82% coverage, all checks passed.**
 
 ## 2. The page: header, quote, chart, filings
 
@@ -179,7 +179,83 @@ Produced by `uv run fathom bench` and rendered by `metrics/render.py` from
 [`metrics/headline.json`](../metrics/headline.json); see [`metrics/card.md`](../metrics/card.md)
 for the live copy the gate keeps in sync.
 
-## 9. Screenshots regeneration
+## 9. Live mode: a real ticker outside the fixture universe
+
+Everything above runs against the committed 20-ticker fixture dataset. Live mode
+(`FATHOM_DATA_SOURCE=live`, `docs/design/05-m4-live-data.md`) fetches any US-listed ticker from
+SEC EDGAR, Yahoo Finance and Stooq instead — no API key, just a contact address for SEC's
+fair-access policy. NFLX is not in the fixture universe; this run proves the live path against a
+real ticker with no shortcuts.
+
+```bash
+export FATHOM_DATA_SOURCE=live
+export FATHOM_SEC_CONTACT=<your.name@example.com>
+export FATHOM_AUDIT_PATH=.cache/live/_audit.jsonl
+uv run fathom fetch NFLX --force
+```
+```
+NFLX cik=0001065280 fetched_at=2026-09-12T20:34:03.100363+00:00
+10-Q 2026-07-17 0001065280-26-000212 sections=10-Q:I.2,10-Q:I.3,10-Q:I.4,10-Q:II.1,10-Q:II.1A
+10-Q 2026-04-17 0001065280-26-000138 sections=10-Q:I.2,10-Q:I.3,10-Q:I.4,10-Q:II.1,10-Q:II.1A
+10-K 2026-01-23 0001065280-26-000034 sections=10-K:1,10-K:1A,10-K:1C,10-K:3,10-K:7,10-K:7A,10-K:9A
+10-Q 2025-10-22 0001065280-25-000406 sections=10-Q:I.2,10-Q:I.3,10-Q:I.4,10-Q:II.1,10-Q:II.1A
+10-Q 2025-07-18 0001065280-25-000323 sections=10-Q:I.2,10-Q:I.3,10-Q:I.4,10-Q:II.1,10-Q:II.1A
+bars 2024-09-12..2026-09-11 source=yahoo via .cache/live/NFLX/bars.parquet
+snapshot=SEC XBRL companyconcept (shares, EPS TTM, equity, DPS TTM) × yahoo close fields_present=market_cap,pe,pb,dividend_yield
+```
+> All five filings parse to full canonical section coverage (10-K gets `1A`/`7`; every 10-Q gets
+> `I.2`), the bar range covers the trailing two years from Yahoo, and all four snapshot fields
+> (`market_cap`, `pe`, `pb`, `dividend_yield`) are present — nothing here is invented, this is the
+> command's actual stdout.
+
+```bash
+uv run fathom brief NFLX
+```
+(same environment as above — `FATHOM_DATA_SOURCE=live` still set — but `FATHOM_LLM_PROVIDER` is
+still its default, `offline`, so this reads the just-fetched live cache and composes the briefing
+extractively from the real Netflix 10-K/10-Q text, with the same citation verification as the
+fixture path):
+```
+NFLX — NETFLIX INC
+
+Business Snapshot:
+- ("Netflix", the "Company", "registrant", "we", or "us") is one of the world's leading
+  entertainment services offering TV series, films, games and live programming across a wide
+  variety of genres and languages. [verified] (10-K 2026-01-23 Business)
+- Members can play, pause and resume watching as much as they want, anytime, anywhere, and can
+  change their plans at any time. [verified] (10-K 2026-01-23 Business)
+
+Risks:
+- If any of the following risks actually occur, our business, financial condition and results of
+  operations could be harmed. [verified] (10-K 2026-01-23 Risk Factors)
+- If our efforts to attract and retain members are not successful, our business will be adversely
+  affected. [verified] (10-K 2026-01-23 Risk Factors)
+
+Notable Disclosures:
+- We have an enterprise-wide information security program designed to identify, protect, detect
+  and respond to and manage reasonably foreseeable cybersecurity risks and threats.
+  [verified] (10-K 2026-01-23 Cybersecurity)
+
+Fathom summarises public SEC filings and market data for advisor preparation. It is not
+investment advice, does not make recommendations, and may contain errors; verify against the
+cited filing before relying on any statement.
+```
+> Truncated to a few claims per section for the doc; the full run produced only `[verified]`
+> claims (Netflix's 10-K/10-Q text quoted verbatim, same as the offline provider always does).
+> The network smoke test (`tests/test_live_network.py`, opt-in, `FATHOM_NETWORK_TESTS=1`) asserts
+> this same property (`verified_share == 1.0`) automatically for NFLX and COST on every run.
+
+Cold-start timing (`tests/test_live_network.py`, real network, no cache): **NFLX 2.58s, COST
+2.38s** for a full materialize (5 filings + bars + 4 XBRL facts) — well under the ≤ 30s NFR-012
+budget.
+
+No live-mode page screenshot is included: `scripts/screenshots.py` starts the Streamlit
+subprocess in fixture mode and drives it via the default ticker selectbox with no hook to switch
+the sidebar to the "Live" radio or type into the free-text ticker box, so capturing the live page
+would need script edits — out of this task's scope. The CLI output above is the verbatim live
+evidence instead.
+
+## 10. Screenshots regeneration
 
 ```bash
 uv sync --all-extras

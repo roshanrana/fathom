@@ -24,6 +24,7 @@ from fathom.config import Settings
 from fathom.contracts import Answer, AnswerDraft, Claim, DraftClaim, Source
 from fathom.errors import Code, FathomError
 from fathom.filings import filings_for, sections_for
+from fathom.live import data_dir_for
 from fathom.prompts import CANONICAL_SECTIONS, SYSTEM_ASK
 from fathom.providers import Provider, make_provider
 
@@ -277,7 +278,8 @@ def ask(
         _log_ask(ticker, "guard", 0, False, latency_ms)
         return answer
 
-    hits = retrieval.search(ticker, question, k, settings.data_dir)
+    data_dir = data_dir_for(ticker, settings)
+    hits = retrieval.search(ticker, question, k, data_dir)
     if not hits:
         answer = _not_found_answer(ticker, question_sha256, settings)
         latency_ms = int((time.monotonic() - start) * 1000)
@@ -293,7 +295,7 @@ def ask(
         _log_ask(ticker, "none", 0, True, latency_ms)
         return answer
 
-    company = filings_for(ticker, settings.data_dir)[0].company_name
+    company = filings_for(ticker, data_dir)[0].company_name
     excerpts = [
         {
             "accession": hit.chunk.accession,
@@ -315,7 +317,7 @@ def ask(
     draft_result = _complete_answer_draft(active_provider, user_payload, settings.max_tokens_ask)
 
     accessions = {hit.chunk.accession for hit in hits}
-    section_text_by_key = _section_text_index(accessions, settings.data_dir)
+    section_text_by_key = _section_text_index(accessions, data_dir)
     claims = _claims_from_draft(draft_result.draft.claims, section_text_by_key)
     scrubbed_claims, guard_hits = guard.scrub_claims(claims)
 

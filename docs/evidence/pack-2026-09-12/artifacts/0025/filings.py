@@ -364,7 +364,7 @@ def sections_for(accession: str, data_dir: Path) -> list[Section]:
 
 def filings_for(ticker: str, data_dir: Path) -> list[Filing]:
     """List a ticker's filings newest first."""
-    symbol = require_ticker(ticker)
+    symbol = require_ticker(ticker, data_dir=data_dir)
     frame = load_frame("filings", data_dir)
     rows = frame[frame["ticker"] == symbol]
     if rows.empty:

@@ -26,6 +26,7 @@ from fathom.data import company, load_frame, require_ticker
 from fathom.errors import Code, FathomError
 from fathom.filings import Filing, filings_for, sections_for
 from fathom.guard import scrub_claims, verify_claim
+from fathom.live import data_dir_for
 from fathom.prompts import SECTION_CAPS, SYSTEM_BRIEFING
 from fathom.providers import Provider, ProviderResult, make_provider
 
@@ -155,7 +156,7 @@ def _as_of_date(ticker: str, data_dir: Path) -> date:
 
 def build_context(ticker: str, data_dir: Path) -> BriefingContext:
     """Assemble the capped briefing context: the newest 10-K plus the two newest 10-Qs."""
-    symbol = require_ticker(ticker)
+    symbol = require_ticker(ticker, data_dir=data_dir)
     filings = filings_for(symbol, data_dir)  # newest first
 
     ten_k = next((filing for filing in filings if filing.form == "10-K"), None)
@@ -276,7 +277,7 @@ def _claims_from_draft(draft: BriefingDraft, context: BriefingContext) -> dict[s
 def brief(ticker: str, settings: Settings, provider: Provider | None = None) -> Briefing:
     """Build a verified, guard-scrubbed `Briefing` for `ticker` (LLD §2.10)."""
     active_provider = provider if provider is not None else make_provider(settings)
-    context = build_context(ticker, settings.data_dir)
+    context = build_context(ticker, data_dir_for(ticker, settings))
     user_json = context.to_user_json()
 
     result, draft, final_user_text = _obtain_draft(

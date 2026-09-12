@@ -154,13 +154,26 @@ def render_claims(claims: list[Claim], filings_by_accession: dict[str, Filing]) 
 
 
 def render_status_strip(
-    llm_provider: str, model: str | None, claims_total: int | None, claims_verified: int | None
+    llm_provider: str,
+    model: str | None,
+    claims_total: int | None,
+    claims_verified: int | None,
+    *,
+    source: str = "fixture",
+    fetched_at: str | None = None,
 ) -> None:
-    """The status strip: provider, model, and (once a briefing exists) claim counts."""
+    """The status strip: provider, model, and (once a briefing exists) claim counts.
+
+    In live mode (`source == "live"`) with a manifest `fetched_at` available, appends
+    " · source: live · fetched <ISO minutes>" (05-m4-live-data.md §5).
+    """
     if model is None:
-        st.caption(f"Provider: {llm_provider} · Model: -")
-        return
-    st.caption(
-        f"Provider: {llm_provider} · Model: {model} · "
-        f"claims {claims_total} · verified {claims_verified}"
-    )
+        line = f"Provider: {llm_provider} · Model: -"
+    else:
+        line = (
+            f"Provider: {llm_provider} · Model: {model} · "
+            f"claims {claims_total} · verified {claims_verified}"
+        )
+    if source == "live" and fetched_at:
+        line += f" · source: live · fetched {fetched_at[:16]}"
+    st.caption(line)

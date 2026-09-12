@@ -1,6 +1,6 @@
 # Requirements Traceability Matrix
 
-Regenerated 2026-09-12T21:16Z by `scripts/evidence.py rtm`.
+Regenerated 2026-09-12T22:11Z by `scripts/evidence.py rtm`.
 
 | Req | Design § | Tasks | Tests | Evidence seq | Status |
 |---|---|---|---|---|---|

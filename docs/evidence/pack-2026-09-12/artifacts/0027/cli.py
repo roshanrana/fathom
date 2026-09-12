@@ -14,7 +14,7 @@ import sys
 from datetime import UTC, datetime
 from importlib import import_module
 from pathlib import Path
-from typing import Annotated, NoReturn
+from typing import Annotated, Literal, NoReturn
 
 import typer
 
@@ -25,6 +25,8 @@ from fathom.config import Settings
 from fathom.contracts import Answer, Briefing, Claim
 from fathom.errors import FathomError
 from fathom.filings import Filing, filings_for
+from fathom.live import data_dir_for
+from fathom.live.build import materialize
 from fathom.prompts import CANONICAL_SECTIONS, SYSTEM_PROBE
 from fathom.providers import make_provider
 from fathom.quotes import quote_card
@@ -38,6 +40,13 @@ JsonOption = Annotated[bool, typer.Option("--json", help="Emit the raw JSON cont
 HostOption = Annotated[str, typer.Option("--host", help="Bind host for the HTTP API.")]
 PortOption = Annotated[int, typer.Option("--port", help="Port for the HTTP API.")]
 OutOption = Annotated[Path, typer.Option("--out", help="Where to write the headline metrics.")]
+SourceOption = Annotated[
+    Literal["fixture", "live"] | None,
+    typer.Option("--source", help="Override the configured data source for this call."),
+]
+ForceOption = Annotated[
+    bool, typer.Option("--force", help="Bypass the live cache TTL and refetch.")
+]
 
 _MAX_QUESTION_LENGTH = 2000
 
@@ -48,12 +57,20 @@ def _fail(exc: FathomError) -> NoReturn:
     raise typer.Exit(2)
 
 
-@app.command()
-def quote(ticker: str) -> None:
-    """Show a reproducible quote snapshot for TICKER."""
+def _settings(source: str | None = None) -> Settings:
+    """`Settings.from_env()`, optionally overridden by an explicit `--source`."""
     settings = Settings.from_env()
+    if source is not None:
+        settings = settings.model_copy(update={"data_source": source})
+    return settings
+
+
+@app.command()
+def quote(ticker: str, source: SourceOption = None) -> None:
+    """Show a reproducible quote snapshot for TICKER."""
+    settings = _settings(source)
     try:
-        card = quote_card(ticker, settings.data_dir)
+        card = quote_card(ticker, data_dir_for(ticker, settings))
     except FathomError as exc:
         _fail(exc)
     typer.echo(
@@ -63,15 +80,48 @@ def quote(ticker: str) -> None:
 
 
 @app.command()
-def filings(ticker: str) -> None:
+def filings(ticker: str, source: SourceOption = None) -> None:
     """List TICKER's 10-K/10-Q filings, newest first."""
-    settings = Settings.from_env()
+    settings = _settings(source)
     try:
-        rows = filings_for(ticker, settings.data_dir)
+        rows = filings_for(ticker, data_dir_for(ticker, settings))
     except FathomError as exc:
         _fail(exc)
     for filing in rows:
         typer.echo(f"{filing.accession} {filing.form} {filing.filing_date} {filing.edgar_url}")
+
+
+@app.command()
+def fetch(ticker: str, force: ForceOption = False, source: SourceOption = None) -> None:
+    """Pre-warm TICKER's live cache and report filing/bars/snapshot coverage (FR-024)."""
+    settings = _settings(source or "live")
+    try:
+        manifest = materialize(ticker, settings, force=force)
+        card = quote_card(manifest.ticker, Path(manifest.data_dir))
+    except FathomError as exc:
+        _fail(exc)
+    typer.echo(f"{manifest.ticker} cik={manifest.cik} fetched_at={manifest.fetched_at.isoformat()}")
+    for filing in manifest.filings:
+        coverage = manifest.sections_coverage.get(filing.accession, [])
+        coverage_text = ",".join(coverage) if coverage else "-"
+        typer.echo(
+            f"{filing.form} {filing.filing_date} {filing.accession} sections={coverage_text}"
+        )
+    typer.echo(f"bars {manifest.bars_from}..{manifest.bars_to} source={manifest.bars_source}")
+    snapshot_fields = [
+        name
+        for name, value in (
+            ("market_cap", card.market_cap),
+            ("pe", card.pe),
+            ("pb", card.pb),
+            ("dividend_yield", card.dividend_yield),
+        )
+        if value is not None
+    ]
+    typer.echo(
+        f"snapshot={manifest.snapshot_source} fields_present="
+        f"{','.join(snapshot_fields) if snapshot_fields else '-'}"
+    )
 
 
 def _filings_by_accession(ticker: str, data_dir: Path) -> dict[str, Filing]:
@@ -135,9 +185,9 @@ def _render_answer(answer: Answer, filings_by_accession: dict[str, Filing]) -> s
 
 
 @app.command()
-def brief(ticker: str, json_output: JsonOption = False) -> None:
+def brief(ticker: str, json_output: JsonOption = False, source: SourceOption = None) -> None:
     """Produce an advisor briefing for TICKER."""
-    settings = Settings.from_env()
+    settings = _settings(source)
     try:
         result = brief_flow(ticker, settings)
     except FathomError as exc:
@@ -149,7 +199,9 @@ def brief(ticker: str, json_output: JsonOption = False) -> None:
 
 
 @app.command()
-def ask(ticker: str, question: str, json_output: JsonOption = False) -> None:
+def ask(
+    ticker: str, question: str, json_output: JsonOption = False, source: SourceOption = None
+) -> None:
     """Ask a grounded question about TICKER's filings."""
     if len(question) > _MAX_QUESTION_LENGTH:
         typer.echo(
@@ -157,7 +209,7 @@ def ask(ticker: str, question: str, json_output: JsonOption = False) -> None:
             err=True,
         )
         raise typer.Exit(2)
-    settings = Settings.from_env()
+    settings = _settings(source)
     try:
         result = ask_flow(ticker, question, settings)
     except FathomError as exc:
@@ -165,7 +217,7 @@ def ask(ticker: str, question: str, json_output: JsonOption = False) -> None:
     if json_output:
         typer.echo(result.model_dump_json())
     else:
-        filings_by_accession = _filings_by_accession(ticker, settings.data_dir)
+        filings_by_accession = _filings_by_accession(ticker, data_dir_for(ticker, settings))
         typer.echo(_render_answer(result, filings_by_accession))
 
 
