@@ -59,3 +59,14 @@ exposes `company_concept(cik, taxonomy, concept) -> dict` for T-019). User-Agent
 B6 (new; `05-m4-live-data.md` §2) — Security Reviewer at T2.
 
 ## Handoff (Implementer fills, ≤10 lines)
+
+Shipped: config.py (5 fields + validation), errors.py (3 codes), fathom/live/{http,sec}.py
+(LiveHttp cache+throttle+size-cap; SecClient: ticker_map/lookup/filings/document_text/
+company_concept; html_to_text). Fixtures fetched live once via a scratchpad script (not
+committed) then trimmed: company_tickers.json (5), aapl_submissions.json (12 curated recent
++ synthetic 10-K/A), aapl_10q.htm (152 KB), aapl_10k.htm (360 KB) — 528 KB total.
+Gate green: 321 passed, mypy strict clean, fathom/live coverage 95-96%, no real network.
+Out-of-scope edit: tests/test_errors.py's Code-enum-membership assertion updated for the
+3 new codes (unavoidable, direct consequence of the sanctioned errors.py change).
+`filings()`'s older-pages fallback is covered only by a synthetic-JSON unit test — no
+recorded fixture exists/was in scope for that branch.

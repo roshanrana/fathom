@@ -26,6 +26,59 @@ def test_fr001_from_env_defaults() -> None:
     assert settings.disclaimer == DEFAULT_DISCLAIMER
 
 
+def test_fr021_from_env_live_defaults() -> None:
+    settings = Settings.from_env({})
+
+    assert settings.data_source == "fixture"
+    assert settings.sec_contact is None
+    assert settings.live_cache_dir == Path(".cache/live")
+    assert settings.live_ttl_hours == 6.0
+    assert settings.price_source == "yahoo"
+
+
+def test_fr025_from_env_live_source_requires_no_immediate_error() -> None:
+    # Settings.from_env itself never requires FATHOM_SEC_CONTACT; that check belongs to
+    # SecClient.from_settings (AC1) so fixture-mode callers are unaffected.
+    settings = Settings.from_env({"FATHOM_DATA_SOURCE": "live"})
+
+    assert settings.data_source == "live"
+    assert settings.sec_contact is None
+
+
+def test_fr021_from_env_sets_live_fields() -> None:
+    settings = Settings.from_env(
+        {
+            "FATHOM_DATA_SOURCE": "live",
+            "FATHOM_SEC_CONTACT": "ops@example.com",
+            "FATHOM_LIVE_CACHE_DIR": "/tmp/live-cache",
+            "FATHOM_LIVE_TTL_HOURS": "12.5",
+            "FATHOM_PRICE_SOURCE": "stooq",
+        }
+    )
+
+    assert settings.data_source == "live"
+    assert settings.sec_contact == "ops@example.com"
+    assert settings.live_cache_dir == Path("/tmp/live-cache")
+    assert settings.live_ttl_hours == 12.5
+    assert settings.price_source == "stooq"
+
+
+def test_nfr005_from_env_invalid_data_source_raises_provider_config() -> None:
+    with pytest.raises(FathomError) as excinfo:
+        Settings.from_env({"FATHOM_DATA_SOURCE": "nope"})
+
+    assert excinfo.value.code == Code.PROVIDER_CONFIG
+    assert excinfo.value.details["var"] == "FATHOM_DATA_SOURCE"
+
+
+def test_nfr005_from_env_invalid_price_source_raises_provider_config() -> None:
+    with pytest.raises(FathomError) as excinfo:
+        Settings.from_env({"FATHOM_PRICE_SOURCE": "nope"})
+
+    assert excinfo.value.code == Code.PROVIDER_CONFIG
+    assert excinfo.value.details["var"] == "FATHOM_PRICE_SOURCE"
+
+
 def test_fr001_from_env_sets_provider_and_portkey_key() -> None:
     settings = Settings.from_env({"FATHOM_LLM_PROVIDER": "portkey", "PORTKEY_API_KEY": "k"})
 

@@ -42,6 +42,8 @@ DEFAULT_DISCLAIMER = (
 
 _TRUE_VALUES = {"1", "true", "yes"}
 _LLM_PROVIDERS = ("offline", "portkey", "anthropic")
+_DATA_SOURCES = ("fixture", "live")
+_PRICE_SOURCES = ("yahoo", "stooq")
 
 
 def _parse_bool(value: str) -> bool:
@@ -64,6 +66,11 @@ class Settings(BaseModel):
     max_tokens_brief: int = 4000
     max_tokens_ask: int = 1500
     disclaimer: str = DEFAULT_DISCLAIMER
+    data_source: Literal["fixture", "live"] = "fixture"
+    sec_contact: str | None = None
+    live_cache_dir: Path = Path(".cache/live")
+    live_ttl_hours: float = 6.0
+    price_source: Literal["yahoo", "stooq"] = "yahoo"
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
@@ -85,6 +92,24 @@ class Settings(BaseModel):
         audit_bodies_raw = source.get("FATHOM_AUDIT_BODIES")
         audit_bodies = _parse_bool(audit_bodies_raw) if audit_bodies_raw is not None else False
 
+        data_source_raw = source.get("FATHOM_DATA_SOURCE", "fixture")
+        if data_source_raw not in _DATA_SOURCES:
+            raise FathomError(
+                Code.PROVIDER_CONFIG,
+                f"FATHOM_DATA_SOURCE must be one of {_DATA_SOURCES}",
+                {"var": "FATHOM_DATA_SOURCE"},
+            )
+        data_source: Literal["fixture", "live"] = data_source_raw  # type: ignore[assignment]
+
+        price_source_raw = source.get("FATHOM_PRICE_SOURCE", "yahoo")
+        if price_source_raw not in _PRICE_SOURCES:
+            raise FathomError(
+                Code.PROVIDER_CONFIG,
+                f"FATHOM_PRICE_SOURCE must be one of {_PRICE_SOURCES}",
+                {"var": "FATHOM_PRICE_SOURCE"},
+            )
+        price_source: Literal["yahoo", "stooq"] = price_source_raw  # type: ignore[assignment]
+
         return cls(
             llm_provider=llm_provider,
             portkey_base_url=source.get(
@@ -102,4 +127,9 @@ class Settings(BaseModel):
             audit_bodies=audit_bodies,
             http_timeout_s=float(source.get("FATHOM_HTTP_TIMEOUT_S", "90.0")),
             disclaimer=source.get("FATHOM_DISCLAIMER", DEFAULT_DISCLAIMER),
+            data_source=data_source,
+            sec_contact=source.get("FATHOM_SEC_CONTACT"),
+            live_cache_dir=Path(source.get("FATHOM_LIVE_CACHE_DIR", ".cache/live")),
+            live_ttl_hours=float(source.get("FATHOM_LIVE_TTL_HOURS", "6.0")),
+            price_source=price_source,
         )

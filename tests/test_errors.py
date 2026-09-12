@@ -30,4 +30,7 @@ def test_nfr005_code_enum_members_match_taxonomy() -> None:
         "PROVIDER_TIMEOUT",
         "CONTRACT_INVALID",
         "AUDIT_WRITE",
+        "SOURCE_CONFIG",
+        "SOURCE_HTTP",
+        "SOURCE_EMPTY",
     }
