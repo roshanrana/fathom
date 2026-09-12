@@ -65,30 +65,32 @@ def _metrics_source_caption(quote: QuoteCard) -> str:
 
 
 def render_quote_metrics(quote: QuoteCard) -> None:
-    """The six `st.metric` cards required by FR-012, plus one shared source caption (D-011)."""
-    columns = st.columns(6)
+    """The six `st.metric` cards required by FR-012, in two rows of three (D-011)."""
+    row1 = st.columns(3)
 
-    with columns[0]:
+    with row1[0]:
         st.metric(
             "Last close",
             f"{quote.last_close:.2f}",
-            f"{quote.change_abs:+.2f} ({quote.change_pct:+.2f}%)",
+            f"{quote.change_pct:+.2f}%",
         )
 
-    with columns[1]:
+    with row1[1]:
         st.metric("52-wk low", f"{quote.week52_low:.2f}")
 
-    with columns[2]:
+    with row1[2]:
         st.metric("52-wk high", f"{quote.week52_high:.2f}")
 
-    with columns[3]:
+    row2 = st.columns(3)
+
+    with row2[0]:
         st.metric("Market cap", format_market_cap(quote.market_cap))
 
-    with columns[4]:
+    with row2[1]:
         value = f"{quote.pe:.2f}" if quote.pe is not None else "—"
         st.metric("P/E", value)
 
-    with columns[5]:
+    with row2[2]:
         value = f"{quote.dividend_yield:.2f}%" if quote.dividend_yield is not None else "—"
         st.metric("Dividend yield", value)
 

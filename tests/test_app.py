@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -41,6 +42,7 @@ def test_fr012_ac1_page_renders_core_elements_without_exception(
     assert not at.exception
     assert len(at.selectbox) > 0
     assert len(at.metric) == 6
+    assert re.match(r"^[+-]\d+\.\d{2}%$", at.metric[0].delta)
     assert len(at.get("plotly_chart")) == 1
     assert len(at.dataframe) >= 1
 

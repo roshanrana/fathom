@@ -45,3 +45,9 @@ The single source caption stays under row 2. FR-012 / NFR-011 unchanged.
 none
 
 ## Handoff (Implementer fills, ≤10 lines)
+`render_quote_metrics` (app/components/rendering.py) now uses two `st.columns(3)` rows: row1
+Last close (delta now `{change_pct:+.2f}%` only)/52-wk low/52-wk high, row2 Market cap/P/E/
+Dividend yield; app/main.py needed no change. tests/test_app.py: added `import re` +
+`re.match(r"^[+-]\d+\.\d{2}%$", at.metric[0].delta)` in test_fr012_ac1_*; six-metric assertions
+unchanged, all 10 tests pass. Screenshots regenerated (01-header-quote.png 44 KB, no truncation);
+all docs/assets/*.png ≤ 425 KB. Full gate: 287 passed, 96.02% coverage, all checks passed.
