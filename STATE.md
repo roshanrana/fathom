@@ -1,5 +1,5 @@
 # STATE — Fathom
-Phase: 0   Milestone: -   Wave: -   Updated: 2026-09-12T10:00:00Z
+Phase: 5   Milestone: M0   Wave: W1   Updated: 2026-09-12T10:55:00Z
 
 **Gate command:** `uv run python scripts/check.py` (exists from T-000 onward).
 **Routing:** T3 (this session) designs and orchestrates only; all implementation, verification
@@ -8,8 +8,9 @@ and security review at T2 Sonnet, effort high (owner instruction, memory: model-
 prototype, one pitch slide, live-demo readiness. Due 2026-09-12.
 
 ## Now / next
-- In progress: Phase 0 → G0 (problem brief, decisions D-000..D-003)
-- Next: Phase 1 requirements → G1; Phase 2 HLD + threat model + routing → G2; Phase 3 LLD → G3; Phase 4 plan + packs → G4
+- G0–G4 passed (ledger seq 1–5). Foundation data committed (seq 6): `scripts/fetch_data.py`, `data/*.parquet`, `data/SOURCES.md` with anchors.
+- In progress: W1 — T-000 (Implementer, attempt 1, T2 Sonnet)
+- Next unblocked after T-000: W2 = T-001, T-002, T-004; then graphify scaffold (Orchestrator, T0)
 
 ## Blocked
 | Task | Since | Reason | Needs |
@@ -30,6 +31,11 @@ prototype, one pitch slide, live-demo readiness. Due 2026-09-12.
 ## Gate log
 | Gate | Date | Approver | Evidence seq |
 |---|---|---|---|
+| G0 | 2026-09-12 | delivery_lead (D-000) | 1 |
+| G1 | 2026-09-12 | delivery_lead (D-000) | 2 |
+| G2 | 2026-09-12 | architecture_review (D-000) | 3 |
+| G3 | 2026-09-12 | architecture_lead (D-000) | 4 |
+| G4 | 2026-09-12 | delivery_lead (D-000) | 5 |
 
 ## Routing overrides
 <!-- deviations from config/model-routing.yaml, with reason -->
