@@ -9,7 +9,7 @@ reasoning: off
 budget: {input_tokens: 15000, tool_calls: 10, wall_clock_min: 10}
 depends_on: [T-016]
 rtm: [FR-012, NFR-011]
-status: todo
+status: done
 ---
 # T-017 — Quote-card layout
 
