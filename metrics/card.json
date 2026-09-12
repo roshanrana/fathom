@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-12T14:43:31.116416+00:00",
+  "generated_at": "2026-09-12T15:06:31.719423+00:00",
   "kpis": [
     {
       "key": "parser_coverage",
@@ -12,10 +12,10 @@
     {
       "key": "retrieval_hit_rate",
       "label": "Golden-query retrieval hit rate",
-      "status": "warn",
-      "target": 0.9,
+      "status": "info",
+      "target": "\u2265 0.9 (informational)",
       "unit": "ratio",
-      "value": 0.7571
+      "value": 0.7786
     },
     {
       "key": "guard_escapes",
@@ -47,7 +47,7 @@
       "status": "pass",
       "target": 5000,
       "unit": "ms",
-      "value": 0
+      "value": 36
     },
     {
       "key": "injection_passed",

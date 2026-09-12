@@ -35,8 +35,11 @@ _PROBE_PING = '{"ping": true}'
 _PROBE_MAX_TOKENS = 16
 
 JsonOption = Annotated[bool, typer.Option("--json", help="Emit the raw JSON contract.")]
+HostOption = Annotated[str, typer.Option("--host", help="Bind host for the HTTP API.")]
 PortOption = Annotated[int, typer.Option("--port", help="Port for the HTTP API.")]
 OutOption = Annotated[Path, typer.Option("--out", help="Where to write the headline metrics.")]
+
+_MAX_QUESTION_LENGTH = 2000
 
 
 def _fail(exc: FathomError) -> NoReturn:
@@ -142,6 +145,12 @@ def brief(ticker: str, json_output: JsonOption = False) -> None:
 @app.command()
 def ask(ticker: str, question: str, json_output: JsonOption = False) -> None:
     """Ask a grounded question about TICKER's filings."""
+    if len(question) > _MAX_QUESTION_LENGTH:
+        typer.echo(
+            f"error INVALID_QUESTION: question exceeds {_MAX_QUESTION_LENGTH} characters",
+            err=True,
+        )
+        raise typer.Exit(2)
     settings = Settings.from_env()
     try:
         result = ask_flow(ticker, question, settings)
@@ -196,11 +205,14 @@ def run_app() -> None:
 
 
 @app.command(name="api")
-def run_api(port: PortOption = 8000) -> None:
-    """Run the FastAPI app (`fathom.api:create_app`) with uvicorn."""
+def run_api(host: HostOption = "127.0.0.1", port: PortOption = 8000) -> None:
+    """Run the FastAPI app (`fathom.api:create_app`) with uvicorn.
+
+    D-008: binds loopback (127.0.0.1) by default; `--host 0.0.0.0` is an explicit choice.
+    """
     import uvicorn
 
-    uvicorn.run("fathom.api:create_app", factory=True, host="0.0.0.0", port=port)
+    uvicorn.run("fathom.api:create_app", factory=True, host=host, port=port)
 
 
 @app.command()

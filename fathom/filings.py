@@ -61,6 +61,24 @@ _10Q_KEY_TO_ID: dict[tuple[str, str], str] = {
     ("II", "1A"): "10-Q:II.1A",
 }
 
+# Step 7 (D-006): heading-vocabulary fallback. Title keys per canonical id (LLD §2.5 step 7);
+# 10-Q ids reuse the same keys as the 10-K id with the matching title.
+_FALLBACK_MIN_BODY = 400
+_TITLE_KEYS: dict[str, tuple[str, ...]] = {
+    "10-K:1": ("description of the business", "business summary", "business"),
+    "10-K:1A": ("risk factors",),
+    "10-K:1C": ("cybersecurity",),
+    "10-K:3": ("legal proceedings",),
+    "10-K:7": ("management's discussion and analysis", "management’s discussion and analysis"),
+    "10-K:7A": ("quantitative and qualitative disclosures",),
+    "10-K:9A": ("controls and procedures",),
+    "10-Q:I.2": ("management's discussion and analysis", "management’s discussion and analysis"),
+    "10-Q:I.3": ("quantitative and qualitative disclosures",),
+    "10-Q:I.4": ("controls and procedures",),
+    "10-Q:II.1": ("legal proceedings",),
+    "10-Q:II.1A": ("risk factors",),
+}
+
 
 class Filing(BaseModel):
     """One 10-K/10-Q filing record (LLD §2.5)."""
@@ -119,6 +137,87 @@ def _part_lookup(part_matches: list[re.Match[str]]) -> Callable[[int], str]:
     return lookup
 
 
+def _heading_vocabulary_matches(normalised: str) -> list[tuple[int, int, str]]:
+    """(line_start, line_end, section_id) for every line starting with a `_TITLE_KEYS` phrase.
+
+    `line_end` is the character offset immediately after the line's content (before its
+    newline), matching how `HEADER` bodies are bounded.
+    """
+    matches: list[tuple[int, int, str]] = []
+    pos = 0
+    for raw_line in normalised.splitlines(keepends=True):
+        content = raw_line.rstrip("\r\n")
+        stripped = content.strip()
+        if stripped and len(stripped) <= 120:
+            low = stripped.lower()
+            for section_id, keys in _TITLE_KEYS.items():
+                if any(low.startswith(key) for key in keys):
+                    matches.append((pos, pos + len(content), section_id))
+                    break
+        pos += len(raw_line)
+    return matches
+
+
+def _fallback_candidate(
+    section_id: str,
+    heading_matches: list[tuple[int, int, str]],
+    item_header_starts: list[int],
+    text_length: int,
+) -> tuple[int, int] | None:
+    """The longest (char_start, char_end) candidate body for `section_id`, or None."""
+    boundary_starts = sorted({start for start, _, _ in heading_matches})
+    best_candidate: tuple[int, int] | None = None
+    for start, end, matched_id in heading_matches:
+        if matched_id != section_id:
+            continue
+        next_boundaries = [b for b in boundary_starts if b > start]
+        next_headers = [h for h in item_header_starts if h > start]
+        candidate_end = min([text_length, *next_boundaries, *next_headers])
+        candidate_len = candidate_end - end
+        best_len = best_candidate[1] - best_candidate[0] if best_candidate is not None else -1
+        if candidate_len > best_len:
+            best_candidate = (end, candidate_end)
+    return best_candidate
+
+
+def _apply_heading_fallback(normalised: str, sections: list[Section]) -> list[Section]:
+    """Step 7 (D-006): widen any canonical section whose step-4 body is < 400 chars.
+
+    Leaves `sections` untouched (byte-identical) unless at least one section is short and a
+    longer heading-vocabulary candidate is found for it.
+    """
+    short_ids = {s.section_id for s in sections if len(s.text) < _FALLBACK_MIN_BODY}
+    if not short_ids:
+        return sections
+
+    heading_matches = _heading_vocabulary_matches(normalised)
+    item_header_starts = [m.start() for m in HEADER.finditer(normalised)]
+    text_length = len(normalised)
+
+    widened: dict[str, Section] = {}
+    for section in sections:
+        if section.section_id not in short_ids:
+            continue
+        candidate = _fallback_candidate(
+            section.section_id, heading_matches, item_header_starts, text_length
+        )
+        if candidate is None:
+            continue
+        char_start, char_end = candidate
+        if (char_end - char_start) > len(section.text):
+            widened[section.section_id] = section.model_copy(
+                update={
+                    "text": normalised[char_start:char_end],
+                    "char_start": char_start,
+                    "char_end": char_end,
+                }
+            )
+
+    if not widened:
+        return sections
+    return [widened.get(section.section_id, section) for section in sections]
+
+
 def parse_sections(text: str, form: str) -> list[Section]:
     """Parse `text` into canonical sections (pure; caller fills `Section.accession`)."""
     normalised = text.replace("\xa0", " ")
@@ -164,6 +263,9 @@ def parse_sections(text: str, form: str) -> list[Section]:
             f"no canonical sections found for form {form!r}",
             {"form": form},
         )
+
+    sections = _apply_heading_fallback(normalised, sections)
+    sections.sort(key=lambda section: section.char_start)
     return sections
 
 

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from fathom.filings import Section, filings_for, sections_for
+from fathom.filings import CANONICAL_SECTIONS, Section, filings_for, sections_for
 
 STOPWORDS: frozenset[str] = frozenset(
     {
@@ -170,7 +170,12 @@ class BM25Index:
         self.k1 = k1
         self.b = b
 
-        doc_tokens = [tokenize(chunk.text) for chunk in chunks]
+        # D-008: index tokens are section-title tokens + chunk-text tokens (explainable,
+        # deterministic; `Chunk.text` itself is unchanged).
+        doc_tokens = [
+            tokenize(CANONICAL_SECTIONS.get(chunk.section_id, "")) + tokenize(chunk.text)
+            for chunk in chunks
+        ]
         self._doc_len = [len(tokens) for tokens in doc_tokens]
         self._n_docs = len(chunks)
         self._avgdl = (sum(self._doc_len) / self._n_docs) if self._n_docs else 0.0

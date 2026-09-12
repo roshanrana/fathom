@@ -14,7 +14,7 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from fathom import __version__
 from fathom.ask import ask as ask_flow
@@ -36,9 +36,9 @@ _VALIDATION_ERROR: dict[str, str] = {"code": "VALIDATION", "message": "invalid r
 
 
 class AskBody(BaseModel):
-    """Request body for `POST /api/ask/{ticker}`."""
+    """Request body for `POST /api/ask/{ticker}` (D-008: bounded to 2 000 characters)."""
 
-    question: str
+    question: str = Field(min_length=1, max_length=2000)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:

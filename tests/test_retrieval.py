@@ -181,3 +181,36 @@ def test_fr009_index_for_is_cached_and_covers_all_sections(data_dir: Path) -> No
 
     assert first is second
     assert len(first.chunks) > 100
+
+
+# --- AC8 (D-008): section-title tokens are part of the indexed token stream --------------------
+
+
+def test_fr009_bm25_search_matches_section_title_word_absent_from_chunk_text() -> None:
+    """A query for the section's *title* word matches even when the chunk body never uses it.
+
+    `CANONICAL_SECTIONS["10-K:1C"]` is "Cybersecurity"; the chunk text below never mentions the
+    word, so this only matches because `BM25Index` now indexes `tokenize(title) +
+    tokenize(chunk.text)` (LLD §2.6, D-008), not `chunk.text` alone.
+    """
+    chunk = Chunk(
+        doc_id="doc_cyber",
+        accession="acc",
+        section_id="10-K:1C",
+        ordinal=0,
+        text="The committee reviews incident response plans and third-party vendor oversight.",
+    )
+    other = Chunk(
+        doc_id="doc_other",
+        accession="acc",
+        section_id="10-K:1",
+        ordinal=0,
+        text="The company sells consumer products across several regions worldwide.",
+    )
+    index = BM25Index([chunk, other])
+
+    hits = index.search("cybersecurity", k=6)
+
+    assert len(hits) == 1
+    assert hits[0].chunk.doc_id == "doc_cyber"
+    assert hits[0].score > 0

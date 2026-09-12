@@ -189,8 +189,11 @@ def _guard_stats() -> dict[str, int]:
 
 
 def _briefing_offline_stats(data_dir: Path) -> tuple[dict[str, float | int], int]:
-    """NFR-007: offline verified share over all 20 tickers; median latency read back from audit.
+    """NFR-007/D-008: offline verified share over all 20 tickers; median `brief()` wall-clock.
 
+    `latency_ms_median` (LLD §5, D-008) is the median end-to-end wall-clock of the whole
+    `brief(ticker)` call per ticker, measured with `time.perf_counter` around each call --
+    not the provider's own reported `latency_ms` (which is ~0 for the offline provider).
     Uses its own temporary audit path (never writes into the repo's `audit/`).
     """
     claims_total = 0
@@ -201,14 +204,11 @@ def _briefing_offline_stats(data_dir: Path) -> tuple[dict[str, float | int], int
         audit_path = Path(tmp_dir) / "bench-briefing-audit.jsonl"
         settings = Settings(data_dir=data_dir, audit_path=audit_path)
         for ticker in UNIVERSE:
+            call_start = time.perf_counter()
             briefing = brief(ticker, settings, provider=None)
+            latencies_ms.append(int((time.perf_counter() - call_start) * 1000))
             claims_total += briefing.claims_total
             claims_verified += briefing.claims_verified
-
-        if audit_path.exists():
-            for line in audit_path.read_text(encoding="utf-8").splitlines():
-                record = json.loads(line)
-                latencies_ms.append(int(record["latency_ms"]))
 
     verified_share = claims_verified / claims_total if claims_total else 0.0
     latency_ms_median = int(statistics.median(latencies_ms)) if latencies_ms else 0

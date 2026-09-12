@@ -207,6 +207,16 @@ def test_nfr001_offline_latency_median_under_budget(
     assert briefing_offline_timing["latency_ms_median"] <= 5000
 
 
+def test_nfr001_offline_latency_median_is_positive_end_to_end_wall_clock(
+    bench_result: tuple[dict[str, object], dict[str, object]],
+) -> None:
+    """AC10 (D-008): latency_ms_median is the measured end-to-end brief() wall-clock, not 0."""
+    _, timing = bench_result
+    briefing_offline_timing = timing["briefing_offline"]
+    assert isinstance(briefing_offline_timing, dict)
+    assert 0 < briefing_offline_timing["latency_ms_median"] < 5000
+
+
 def test_nfr001_run_bench_completes_within_wall_clock_budget(tmp_path: Path) -> None:
     out = tmp_path / "headline.json"
     start = time.monotonic()
@@ -281,11 +291,13 @@ _FAKE_TIMING: dict[str, object] = {
 }
 
 
-def test_fr015_render_marks_retrieval_hit_rate_warn_below_target() -> None:
+def test_fr015_render_marks_retrieval_hit_rate_info_below_target() -> None:
+    """D-008: below the 0.9 target, the KPI is informational (not a failing "warn")."""
     render = _load_render_module()
     card = render.build_card(_fake_headline(0.75), _FAKE_TIMING)
     kpi = next(k for k in card["kpis"] if k["key"] == "retrieval_hit_rate")
-    assert kpi["status"] == "warn"
+    assert kpi["status"] == "info"
+    assert kpi["target"] == "≥ 0.9 (informational)"
 
 
 def test_fr015_render_marks_retrieval_hit_rate_pass_at_target() -> None:

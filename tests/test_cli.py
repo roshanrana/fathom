@@ -102,22 +102,62 @@ def test_fr013_probe_offline_prints_provider_model_and_pong_reply() -> None:
     assert "pong" in result.stdout
 
 
-# --- bench/mcp: not-yet-available lazy imports (T-010/T-012 land later) ------------------------
+# --- bench/mcp: lazy-imported commands, now that T-010/T-012 have shipped ----------------------
+#
+# Scope note accepted from Orchestrator: T-012 landed fathom/mcp_server.py, so invoking `mcp`
+# under CliRunner used to run the real stdio server (I/O on closed stdio -> failure). These now
+# monkeypatch the lazily-imported module's entry point rather than exercising the real bench
+# run / stdio server, so they stay fast and hermetic while still covering the CLI wiring.
 
 
-def test_fr013_bench_reports_not_available_before_t010_ships() -> None:
-    result = runner.invoke(app, ["bench"])
+def test_fr013_bench_command_invokes_run_bench_with_out_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import fathom.bench as bench_module
 
-    if result.exit_code == 0:
-        pytest.skip("fathom.bench is now available (T-010 shipped)")
-    assert result.exit_code == 2
-    assert "error NOT_AVAILABLE: bench arrives in T-010" in result.output
+    calls: list[Path] = []
+    monkeypatch.setattr(bench_module, "run_bench", lambda out: calls.append(out))
+
+    out_path = tmp_path / "headline.json"
+    result = runner.invoke(app, ["bench", "--out", str(out_path)])
+
+    assert result.exit_code == 0
+    assert calls == [out_path]
 
 
-def test_fr013_mcp_reports_not_available_before_t012_ships() -> None:
+def test_fr013_mcp_command_invokes_mcp_server_main(monkeypatch: pytest.MonkeyPatch) -> None:
+    import fathom.mcp_server as mcp_module
+
+    calls: list[bool] = []
+    monkeypatch.setattr(mcp_module, "main", lambda: calls.append(True))
+
     result = runner.invoke(app, ["mcp"])
 
-    if result.exit_code == 0:
-        pytest.skip("fathom.mcp_server is now available (T-012 shipped)")
+    assert result.exit_code == 0
+    assert calls == [True]
+
+
+# --- AC9 (D-008): CLI `api --host` default and `ask` question length bound --------------------
+
+
+def test_fr013_api_command_host_option_defaults_to_loopback() -> None:
+    """Inspect the Typer command's own parameter default, never bind a real socket."""
+    command = next(cmd for cmd in app.registered_commands if cmd.name == "api")
+    assert command.callback is not None
+    host_default = command.callback.__defaults__[
+        command.callback.__code__.co_varnames.index("host")
+    ]
+    assert host_default == "127.0.0.1"
+
+
+def test_fr013_ask_question_over_2000_chars_exits_2_with_invalid_question() -> None:
+    result = runner.invoke(app, ["ask", "AAPL", "x" * 2001])
+
     assert result.exit_code == 2
-    assert "error NOT_AVAILABLE: mcp arrives in T-012" in result.output
+    assert "error INVALID_QUESTION: question exceeds 2000 characters" in result.output
+
+
+def test_fr013_ask_question_at_2000_chars_is_accepted() -> None:
+    result = runner.invoke(app, ["ask", "AAPL", "x" * 2000, "--json"])
+
+    assert result.exit_code == 0

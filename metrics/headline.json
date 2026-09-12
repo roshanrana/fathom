@@ -1,7 +1,7 @@
 {
   "briefing_offline": {
-    "claims_total": 367,
-    "claims_verified": 367,
+    "claims_total": 378,
+    "claims_verified": 378,
     "tickers": 20,
     "verified_share": 1.0
   },
@@ -24,8 +24,8 @@
   },
   "retrieval": {
     "golden_queries": 7,
-    "hit_rate": 0.7571,
-    "hits": 106,
+    "hit_rate": 0.7786,
+    "hits": 109,
     "total": 140
   },
   "schema": "fathom-headline/1",

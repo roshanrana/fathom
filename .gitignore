@@ -15,5 +15,6 @@ graphify-out/cache/
 .env
 .cache/
 metrics/timing.json
+.tmp-audit/
 graphify-out/*
 !graphify-out/GRAPH_REPORT.md

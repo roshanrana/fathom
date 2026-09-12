@@ -128,6 +128,30 @@ def test_fr014_post_ask_missing_question_returns_422(data_dir: Path, tmp_path: P
     assert body["data"] is None
 
 
+def test_fr014_post_ask_question_over_2000_chars_returns_422(
+    data_dir: Path, tmp_path: Path
+) -> None:
+    """AC9 (D-008): a 2 001-character question is rejected by the bounded AskBody field."""
+    client = _client(data_dir, tmp_path)
+
+    response = client.post("/api/ask/AAPL", json={"question": "x" * 2001})
+
+    assert response.status_code == 422
+    body = response.json()
+    assert set(body.keys()) == _ENVELOPE_KEYS
+    assert body["ok"] is False
+    assert body["data"] is None
+
+
+def test_fr014_post_ask_question_at_2000_chars_is_accepted(data_dir: Path, tmp_path: Path) -> None:
+    """The 2 000-character boundary itself is still valid."""
+    client = _client(data_dir, tmp_path)
+
+    response = client.post("/api/ask/AAPL", json={"question": "x" * 2000})
+
+    assert response.status_code == 200
+
+
 def test_fr014_provider_config_error_returns_503_naming_the_variable(
     data_dir: Path, tmp_path: Path
 ) -> None:

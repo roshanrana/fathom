@@ -8,23 +8,25 @@ from fathom.contracts import Claim
 
 GUARD_NOTICE = "[removed: recommendation-style language is not permitted in Fathom output]"
 
-# Frozen, case-insensitive (LLD §6.4). Do not reorder, add, or remove entries.
+# Frozen, case-insensitive (LLD §6.4, amended by D-006: inflections on patterns 1, 3, 9;
+# "stock price" on 11). Do not reorder, add, or remove entries.
 ADVICE_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
     re.compile(pattern, re.IGNORECASE)
     for pattern in (
         r"\b(we|i|you|investors?|clients?|one)\s+(should|ought to|must|need to)\s+"
-        r"(buy|sell|hold|invest|avoid|add|trim|accumulate|short)\b",
+        r"(be\s+)?(buy|sell|hold|invest|avoid|add|trim|accumulate|short)\w*",
         r"\b(strong\s+)?(buy|sell|hold)\s+(rating|recommendation|signal|call|idea)\b",
-        r"\brecommend(s|ed|ation|ations)?\b[^.]{0,60}\b(buy|sell|hold|purchas\w*|invest\w*|position)\b",
+        r"\brecommend(s|ed|ation|ations|ing)?\b[^.]{0,60}"
+        r"\b(buy\w*|sell\w*|hold\w*|purchas\w*|invest\w*|position)\b",
         r"\bprice\s+target\b",
         r"\b(over|under)weight\b",
         r"\b(under|over)valued\b",
         r"\b(good|great|excellent|bad|poor|terrible)\s+"
         r"(investment|buy|entry point|time to (buy|sell))\b",
         r"\b(buy|sell)\s+(the|this|these)\s+(stock|shares?|dip|name)\b",
-        r"\bshould\s+(i|you|we|they|clients?|investors?)\s+(buy|sell|hold|invest|short)\b",
+        r"\bshould\s+(i|you|we|they|clients?|investors?)\s+(buy|sell|hold|invest|short)\w*",
         r"\bis\s+(it|this|\w+)\s+a\s+(good|bad|great|safe)\s+(investment|buy|stock|bet)\b",
-        r"\b(will|is|does)\s+(the\s+)?(stock|share price|price|it)\s+"
+        r"\b(will|is|does)\s+(the\s+)?(stock|share price|stock price|price|it)\s+"
         r"(go|going|likely to go|rise|fall|rally|crash)\b",
         r"\b(predict|forecast)\b[^.]{0,40}\b(price|stock)\b",
         r"\b(bullish|bearish)\b",

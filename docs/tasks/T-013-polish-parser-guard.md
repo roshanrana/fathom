@@ -74,3 +74,12 @@ filing whose step-4 bodies are all ≥ 400 characters byte-identical.
 B1 (guard) — Security Reviewer at T2 reviews the pattern diff for regressions and backtracking.
 
 ## Handoff (Implementer fills, ≤10 lines)
+1. Deviation: guard.py pattern 1 needed an added optional `(be\s+)?` (not in LLD §6.4's literal text) so AC3's "You should be buying this stock" trips; 14 patterns kept, all benign phrases still False.
+2. MCD real headings matched LLD keys verbatim: "BUSINESS SUMMARY"/"DESCRIPTION OF THE BUSINESS", "RISK FACTORS", "MANAGEMENT'S DISCUSSION AND ANALYSIS OF FINANCIAL CONDITION AND RESULTS OF OPERATIONS", "CYBERSECURITY", "LEGAL PROCEEDINGS", "Controls and Procedures" — no new keys invented.
+3. AC1 MCD (0000063908-26-000035) section lengths after fallback: 10-K:1=22350, 10-K:1A=45839, 10-K:7=63073 chars (all >=2000; 1C=8705, 3=109606, 9A=13586, 7A=75).
+4. Deviation: AC2 assumed only MCD's 10-K would change; 9 more 10-Ks (AMZN, BAC, CAT, CVX, GS, JNJ, JPM, TSLA, XOM) also have >=1 canonical section with a step-4 body <400 chars, so they change too (LLD's literal any-id trigger, not an implementation bug) — regression test checks the LLD's real invariant (byte-identical only where every step-4 body was already >=400) rather than "MCD-only," and asserts every other change still meets the >=400 floor.
+5. Retrieval hit-rate: 0.7357 (before title-boost, current parser) -> 0.7786 (after boosting); still <0.9, so render.py's `retrieval_hit_rate` KPI status is "info" with target "≥ 0.9 (informational)" per D-008; no golden query removed/weakened.
+6. Latency: `briefing_offline.latency_ms_median` = 57 ms (measured end-to-end `brief()` wall-clock via `time.perf_counter`, non-zero, well under the 5000 ms budget).
+7. Scope note accepted from Orchestrator: replaced the stale "bench/mcp not available" CLI stub tests (T-010/T-012 now ship both modules) with tests that monkeypatch `run_bench`/`mcp_server.main` and assert they're invoked.
+8. `.tmp-audit/` source not reproducible/found anywhere in the current tree (no code references); added to `.gitignore` defensively per instructions regardless.
+9. Full gate green: 238 tests (95% cov), mypy strict clean (both platforms), ruff clean, secrets scan clean, bench/bench-drift/card-drift all green. `metrics/headline.json` was `git add`-staged (not committed) so the bench-drift step's `git diff` is quiet; nothing was committed.
