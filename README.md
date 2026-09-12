@@ -1,5 +1,7 @@
 # Fathom
 
+[![check](https://github.com/roshanrana/fathom/actions/workflows/check.yml/badge.svg)](https://github.com/roshanrana/fathom/actions/workflows/check.yml)
+
 Fathom takes a stock ticker and gives a wealth-management advisor one page to prepare for a
 client call: the current quote with context (range, valuation, trend), the company's most
 recent SEC filings with links to EDGAR, and an AI briefing of what those filings say that
