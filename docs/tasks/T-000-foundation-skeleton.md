@@ -70,3 +70,9 @@ card steps are added in T-010.
 B3 (fixtures on disk: DATA_MISSING path); B5 (build pipeline: gate, secrets scan).
 
 ## Handoff (Implementer fills, ≤10 lines)
+Implemented: pyproject/uv.lock, .python-version, LICENSE, README, Makefile, fathom/{__init__,py.typed,errors,config,data}.py, app/main.py skeleton, scripts/{check,secrets_scan}.py, .github/workflows/check.yml, .streamlit/config.toml, tests/{__init__,conftest,test_config,test_errors,test_data,test_app_skeleton}.py.
+Files changed: all of the above (new files), all within Scope.
+Tests run: `uv run pytest tests -q` → 25 passed; `uv run python scripts/check.py` → all checks passed (ruff check, ruff format --check, mypy fathom x2, pytest --cov=fathom --cov-fail-under=80 → 98.89%, secrets scan) all green.
+Deviations from pack: none — pyarrow-stubs installed without conflict, so it was kept (not dropped). `[project.scripts]` omitted per AC6 (T-009 owns cli.py).
+Open questions: none.
+Budget actual: ~45k input tokens, ~30 tool calls, well under the 120 min / 80 tool-call budget.
