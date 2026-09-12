@@ -1,0 +1,66 @@
+---
+id: T-011
+title: Documentation and screenshots
+milestone: M3
+risk: low
+tier: T2
+complexity: high
+reasoning: on
+budget: {input_tokens: 80000, tool_calls: 80, wall_clock_min: 120}
+depends_on: [T-008, T-009, T-010]
+rtm: [FR-017]
+status: todo
+---
+# T-011 — Documentation and screenshots
+
+## Goal
+README, `docs/OVERVIEW.md`, `docs/SHOWCASE.md` (with screenshots), `docs/ASSUMPTIONS.md`,
+`docs/mcp.md` placeholder if T-012 is not yet merged (omit otherwise), all matching the code as
+built. The pitch slide is NOT in scope (Orchestrator produces it).
+
+## Spec references
+`01-requirements.md` FR-017 (verbatim): README (run in three commands, provider switch, how
+citations are verified), `docs/OVERVIEW.md`, `docs/SHOWCASE.md` with screenshots,
+`docs/ASSUMPTIONS.md`, the one-slide pitch in `docs/pitch/` (Orchestrator). Owner conventions
+(Lodestar precedent): OVERVIEW = what it is, architecture (one diagram in text), how grounding
+works, data sources with licences (copy from `data/SOURCES.md`), limits; SHOWCASE = a walk-through
+with screenshots (`docs/assets/*.png`) of the page: header + quote card, chart + filings,
+briefing with badges, Q&A with citations, the CLI JSON, the API envelope, and the metrics card
+table (`metrics/card.md` embedded); ASSUMPTIONS = the three assumptions from `01-requirements.md`
+plus fixture as-of dates and the offline-vs-live grounding caveat (D-005). Screenshots:
+`scripts/screenshots.py` using Playwright (optional dependency group `screenshots`), starting
+`streamlit run app/main.py --server.port 8765 --server.headless true` as a subprocess, waiting
+for the port, growing the viewport to the `stMain` container height before each full-page
+capture (Lodestar lesson), clicking "Generate briefing" and asking one question before the
+briefing/Q&A captures; PNGs ≤ 600 KB each (scale 1). README sections: what, why it is
+trustworthy (verified citations, advice guard, audit log), run (three commands), live mode
+(`FATHOM_LLM_PROVIDER=portkey PORTKEY_API_KEY=…`, `fathom probe`), CLI/API/MCP one-liners,
+metrics card (embed `metrics/card.md`), data sources + licences, design docs index, limits.
+
+## Scope (files this task may touch)
+- README.md, docs/OVERVIEW.md, docs/SHOWCASE.md, docs/ASSUMPTIONS.md
+- docs/assets/*.png, scripts/screenshots.py
+- pyproject.toml (only if the `screenshots` optional group is missing)
+
+## Acceptance criteria
+- AC1: Every command in README runs as written (the Verifier executes `uv sync --all-extras`, `uv run python scripts/check.py`, `uv run fathom brief AAPL`).
+- AC2: SHOWCASE embeds ≥ 5 PNGs that exist under `docs/assets/`, each ≤ 600 KB, and the metrics card table.
+- AC3: Every figure quoted in the docs (test count, coverage, KPI values) matches `metrics/card.md` or the current gate output; no invented numbers.
+- AC4: OVERVIEW's data-source table lists the four Hugging Face dataset ids with licences exactly as in `data/SOURCES.md`.
+- AC5: `uv run python scripts/check.py` still passes; screenshots script is excluded from mypy/ruff strictness like Lodestar or passes them.
+
+## Validation commands (targeted)
+- `uv run --group screenshots python scripts/screenshots.py`
+- `uv run python scripts/check.py`
+
+## Verification checklist (for the Verifier)
+- [ ] scope respected
+- [ ] no invented figures
+- [ ] commands run as written
+- [ ] screenshots present and sized
+- [ ] no new runtime dependencies
+
+## Threat-model boundary touched
+none
+
+## Handoff (Implementer fills, ≤10 lines)

@@ -286,8 +286,11 @@ MCP tools (optional): `get_quote(ticker)`, `list_filings(ticker)`, `get_briefing
  "injection": {"passed": true},
  "timing_ms": 12345}
 ```
-Values are illustrative; the shape is frozen. `timing_ms` and `generated_at` are excluded from
-the drift check (`metrics/render.py --check` compares everything else against `metrics/card.json`).
+Values are illustrative; the shape is frozen with one split: the three timing-dependent fields
+(`generated_at`, `briefing_offline.latency_ms_median`, `timing_ms`) are written to
+`metrics/timing.json` (gitignored) so that `metrics/headline.json` is byte-deterministic and the
+gate's `git diff --exit-code -- metrics/headline.json` step is meaningful; `metrics/render.py`
+reads both files and `--check` compares the deterministic payload against `metrics/card.json`.
 `metrics/card.json` is the rendered card model: `{"title", "generated_at", "kpis": [{"key","label","value","unit","target","status"}]}`; `metrics/card.md` is its markdown.
 
 ## 6. Prompts and section policy (FROZEN text lives in `fathom/prompts.py`)
