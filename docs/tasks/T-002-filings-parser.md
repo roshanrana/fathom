@@ -73,3 +73,10 @@ with the longest body; emit canonical ids in document order; zero canonical sect
 B3 (fixture text is untrusted data; the parser never evaluates it).
 
 ## Handoff (Implementer fills, ≤10 lines)
+Implemented: Filing/Section models, filings_for, edgar_url, sections_for (cached), parse_sections, period_end, CANONICAL_SECTIONS per LLD §2.5 algorithm steps 1-6.
+Files changed: fathom/filings.py (new), tests/test_filings.py (new).
+Tests run: `uv run pytest tests/test_filings.py -q` → 11 passed. `uv run ruff check` + `ruff format --check` on scope files → clean. `uv run mypy fathom` → clean (8 files).
+Deviations from pack: none.
+Open questions: AC4 allowlist is empty — all 97 fixtures pass coverage (verified 10-K→{1A,7}, 10-Q→I.2).
+Full gate (`uv run python scripts/check.py`): fails only on pre-existing `ruff format --check` issue in `fathom/providers.py` (line 92, out of scope, another task's file) — not caused by this task.
+Budget actual: ~34k input tokens, ~30 tool calls, ~25 min.
