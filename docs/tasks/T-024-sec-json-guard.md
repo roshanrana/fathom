@@ -9,7 +9,7 @@ reasoning: off
 budget: {input_tokens: 20000, tool_calls: 20, wall_clock_min: 20}
 depends_on: [T-023]
 rtm: [FR-021, FR-025]
-status: todo
+status: done
 ---
 # T-024 — SEC client: guarded JSON decoding everywhere
 
