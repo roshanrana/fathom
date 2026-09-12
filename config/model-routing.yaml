@@ -1,0 +1,83 @@
+# config/model-routing.yaml — build-time model routing for this project.
+# Owned by the client's platform team. Agents read it; they never edit it mid-build.
+# Model IDs below are EXAMPLES — replace with the client's approved catalogue.
+# Tier semantics are defined in references/model-routing.md.
+
+version: 1
+project: "Fathom"
+approved_providers: [anthropic]        # or: [bedrock, vertex, azure, local]
+spend_ceiling_usd: 0                   # build-time AI ceiling from the problem brief; 0 = not set
+
+tiers:
+  T0:
+    kind: script
+    notes: "Deterministic. make check, scaffold, evidence, sbom, scanners."
+  T1:
+    kind: model
+    model: "claude-haiku-4-5-20251001"        # example; or a local vLLM instruct model
+    endpoint: null                             # e.g. http://vllm.internal:8000/v1 for local
+    reasoning: off
+    max_context_tokens: 16000
+    temperature: 0.1
+    may_see: [code, synthetic_data, docs]
+  T2:
+    kind: model
+    model: "claude-sonnet-5"                   # example
+    endpoint: null
+    reasoning: off                             # packs may set reasoning: on for complexity: high
+    max_context_tokens: 80000
+    temperature: 0.2
+    may_see: [code, synthetic_data, docs]
+  T3:
+    kind: model
+    model: "claude-opus-5"                     # example; Fable/Mythos-class where approved
+    endpoint: null
+    reasoning: on
+    reasoning_budget_tokens: 16000
+    max_context_tokens: 150000
+    temperature: 0.2
+    may_see: [code, synthetic_data, docs, client_documents]
+
+# Default role → tier. Packs override tier per task; this is the fallback.
+roles:
+  orchestrator: T2
+  architect: T3
+  planner: T3
+  implementer:
+    template: T1
+    normal: T2
+    high: T2            # T3 if risk: high AND complexity: high
+  verifier:
+    low: T1             # only when validation is fully automated
+    medium: T2
+    high: T3
+  security_reviewer:
+    low: T0             # scanners only
+    medium: T2
+    high: T3
+  evidence: T1
+
+# Cross-model verification for high-risk tasks (if the catalogue has >1 family)
+cross_model_verification:
+  enabled: false
+  verifier_model: null   # e.g. a second approved family
+
+# Escalation policy (see model-routing.md §5)
+escalation:
+  max_attempts_per_task: 2
+  escalate_on: [reasoning_bound]      # never: environment_bound
+  step: 1                              # tiers
+
+# Budgets by complexity (ceilings; packs may tighten, never loosen)
+budgets:
+  template: {input_tokens: 15000, tool_calls: 10, wall_clock_min: 10}
+  normal:   {input_tokens: 40000, tool_calls: 40, wall_clock_min: 45}
+  high:     {input_tokens: 80000, tool_calls: 80, wall_clock_min: 120}
+  verifier_ratio: 0.4
+  security_ratio: {medium: 0.25, high: 0.6}
+
+# Parallelism
+parallelism:
+  max_implementers_per_wave: 3
+  ci_runners: 2
+  local_inference_batch: 4

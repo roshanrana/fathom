@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+audit/
+graphify-out/graph.json
+graphify-out/graph.html
+graphify-out/cache/
+.worktrees/
+.streamlit/secrets.toml
+.env
