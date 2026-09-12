@@ -11,7 +11,7 @@ is quoted or summarised underneath it — nothing here is typed in from memory.
 uv run python scripts/check.py
 ```
 > Ran ruff lint/format, mypy strict (host and `--platform linux`), pytest, the secrets scan,
-> `fathom bench`, bench drift and card drift: **238 passed, 95.18% coverage, all checks passed.**
+> `fathom bench`, bench drift and card drift: **241 passed, 95.22% coverage, all checks passed.**
 
 ## 2. The page: header, quote, chart, filings
 
@@ -170,7 +170,7 @@ and Claude Code, plus the full tool reference: [`docs/mcp.md`](mcp.md).
 | Guard escapes (adversarial phrases) | 0 | count | 0 | pass |
 | Guard false positives (benign phrases) | 0 | count | 0 | info |
 | Offline briefing verified share | 1.0 | ratio | 0.9 | pass |
-| Offline briefing latency, median | 36 | ms | 5000 | pass |
+| Offline briefing latency, median | 33 | ms | 5000 | pass |
 | Prompt-injection guard test | True | bool | True | pass |
 
 <!-- metrics:end -->

@@ -81,3 +81,4 @@ a `fastapi.testclient.TestClient` call against `fathom.api.create_app()` for `/h
 equivalent `curl`). Every figure quoted (test count, coverage, KPI table, AAPL quote/JSON values)
 came from one of these runs or from `metrics/card.md` / `data/SOURCES.md` verbatim — none invented.
 Not verified or approved by me; over to the Verifier.
+Attempt 2: README.md metrics table latency 36ms->33ms; docs/SHOWCASE.md prose "238 passed, 95.18%" -> "241 passed, 95.22%" and metrics table latency 36ms->33ms; docs/OVERVIEW.md and docs/ASSUMPTIONS.md had no stale gate figures ; gate 241 passed/95.22% coverage
