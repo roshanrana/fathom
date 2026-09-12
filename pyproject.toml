@@ -20,6 +20,9 @@ dependencies = [
     "pandas>=2.2",
 ]
 
+[project.scripts]
+fathom = "fathom.cli:app"
+
 [project.optional-dependencies]
 mcp = [
     "mcp>=1.9,<2",

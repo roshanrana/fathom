@@ -77,9 +77,7 @@ def test_nfr003_pyproject_declares_lld_dependency_set() -> None:
     optional_deps = project["optional-dependencies"]
     assert "mcp" in optional_deps
     assert "screenshots" in optional_deps
-    assert 'fathom = "fathom.cli:app"' not in (REPO_ROOT / "pyproject.toml").read_text(
-        encoding="utf-8"
-    )
+    assert project["scripts"] == {"fathom": "fathom.cli:app"}
 
 
 def test_nfr003_no_print_statements_in_package() -> None:

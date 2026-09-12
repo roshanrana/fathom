@@ -71,3 +71,16 @@ headers, "- text [verified|unverified|removed] (form date section)").
 B1 (HTTP input validation; error disclosure) — Security Reviewer at T2.
 
 ## Handoff (Implementer fills, ≤10 lines)
+Delivered fathom/cli.py (quote/filings/brief/ask/probe/app/api/bench/mcp) and fathom/api.py
+(create_app with envelope + status-mapped exception handlers); pyproject.toml got only the
+`[project.scripts]` entry; `uv sync --all-extras` re-run so `fathom` installs. bench/mcp use
+`importlib.import_module` (not a static `from X import Y`) so mypy strict stays clean whether
+or not T-010/T-012's modules exist yet. Scope amendment accepted from Orchestrator: updated
+`test_nfr003_pyproject_declares_lld_dependency_set` in tests/test_config.py to assert
+`project["scripts"] == {"fathom": "fathom.cli:app"}` instead of asserting its absence; also
+kept fathom/api.py lines <100 chars (ruff E501). Targeted commands green: `pytest
+tests/test_cli.py tests/test_api.py tests/test_config.py` (36 passed, 1 skipped — bench-CLI
+test self-skips now that a concurrent T-010 shipped fathom/bench.py), `ruff check`/`format
+--check` and `mypy fathom` clean on all scope files. Full gate `scripts/check.py` fails only at
+the pytest step, solely because fathom/bench.py (T-010, out of scope) contains a `print(`
+statement tripping `test_nfr003_no_print_statements_in_package`; not touched, per scope.
