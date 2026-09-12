@@ -105,13 +105,27 @@ def _validate_concept_identifier(value: str) -> None:
         raise _invalid_concept_identifier_error()
 
 
-def _malformed_concept_error() -> FathomError:
-    """SOURCE_HTTP for a companyconcept body that fails to decode into a JSON object."""
-    return FathomError(
-        Code.SOURCE_HTTP,
-        "sec companyconcept response could not be parsed",
-        {"source": "sec", "status": 200, "reason": "malformed response"},
-    )
+def _decode_json(body: bytes, source: str) -> dict[str, object]:
+    """Decode a JSON-object body from `source` (05-m4-live-data.md §4 SOURCE_HTTP guard, frozen).
+
+    Every SEC JSON response — the ticker map, submissions documents (including paginated
+    older-filing pages), and companyconcept — is routed through this one helper. UTF-8 decoding
+    and JSON parsing happen inside a single `except Exception`, and a non-dict top-level value
+    is rejected the same way, so a corrupted or unexpected body never reaches a caller as a bare
+    `UnicodeDecodeError`/`JSONDecodeError` (T-023 attempt-4/attempt-5 findings). Raises
+    `SOURCE_HTTP` reason "malformed response" with no body/URL text in message or details.
+    """
+    try:
+        payload = json.loads(body)
+        if not isinstance(payload, dict):
+            raise TypeError(f"{source} payload is not a JSON object")
+    except Exception as exc:  # noqa: BLE001 - whole-body parse guard, see docstring
+        raise FathomError(
+            Code.SOURCE_HTTP,
+            f"{source} response could not be parsed",
+            {"source": source, "status": 200, "reason": "malformed response"},
+        ) from exc
+    return cast(dict[str, object], payload)
 
 
 def _document_url(cik: str, accession: str, primary_document: str) -> str:
@@ -193,7 +207,7 @@ class SecClient:
     def ticker_map(self) -> dict[str, dict[str, object]]:
         """The SEC ticker -> CIK map, keyed by upper-cased ticker (e.g. "BRK-B")."""
         body = self._http.get(_TICKER_MAP_URL, ttl_hours=_TICKER_MAP_TTL_HOURS, source="sec")
-        raw = cast(dict[str, dict[str, object]], json.loads(body))
+        raw = cast(dict[str, dict[str, object]], _decode_json(body, "sec"))
         return {str(entry["ticker"]).upper(): entry for entry in raw.values()}
 
     def lookup(self, ticker: str) -> SecCompany:
@@ -242,7 +256,7 @@ class SecClient:
                 _validate_safe_name(name)
                 page_url = _SUBMISSIONS_PAGE_URL.format(name=name)
                 body = self._http.get(page_url, ttl_hours=_SUBMISSIONS_TTL_HOURS, source="sec")
-                page_table = cast(dict[str, list[object]], json.loads(body))
+                page_table = cast(dict[str, list[object]], _decode_json(body, "sec"))
                 page_entries = _entries_from_table(page_table)
                 candidates.extend(
                     entry for entry in page_entries if entry.get("form") in _QUALIFYING_FORMS
@@ -296,18 +310,12 @@ class SecClient:
         _validate_concept_identifier(concept)
         url = _COMPANY_CONCEPT_URL.format(cik=cik, taxonomy=taxonomy, concept=concept)
         body = self._http.get(url, ttl_hours=_FACTS_TTL_HOURS, source="sec")
-        try:
-            payload = json.loads(body)
-            if not isinstance(payload, dict):
-                raise TypeError("companyconcept payload is not a JSON object")
-        except Exception as exc:  # noqa: BLE001 - whole-body parse guard, see docstring
-            raise _malformed_concept_error() from exc
-        return cast(dict[str, object], payload)
+        return _decode_json(body, "sec")
 
     def _submissions(self, cik: str) -> dict[str, object]:
         url = _SUBMISSIONS_URL.format(cik=cik)
         body = self._http.get(url, ttl_hours=_SUBMISSIONS_TTL_HOURS, source="sec")
-        return cast(dict[str, object], json.loads(body))
+        return _decode_json(body, "sec")
 
     def _to_filing(self, cik: str, entry: dict[str, object]) -> SecFiling:
         form = cast(Literal["10-K", "10-Q"], entry["form"])

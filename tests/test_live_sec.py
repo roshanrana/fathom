@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import random
 from datetime import date
 from pathlib import Path
 
@@ -476,3 +477,156 @@ def test_fr023_company_concept_invalid_taxonomy_raises_invalid_identifier_zero_r
     assert err.code == Code.SOURCE_HTTP
     assert err.details["reason"] == "invalid identifier"
     assert calls == []
+
+
+_MALFORMED_BODIES = [b"\xff\xfe", b"not json", b"[]", b"null", b'"s"']
+_MALFORMED_IDS = ["invalid-utf8", "non-json", "json-list", "json-null", "json-string"]
+
+
+@pytest.mark.parametrize("body", _MALFORMED_BODIES, ids=_MALFORMED_IDS)
+def test_fr021_lookup_ticker_map_malformed_body_raises_source_http_malformed(
+    tmp_path: Path, body: bytes
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url) == "https://www.sec.gov/files/company_tickers.json":
+            return httpx.Response(200, content=body)
+        return httpx.Response(404)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    http = LiveHttp(cache_dir=tmp_path, user_agent="Fathom/0.1.0 (t@example.com)", client=client)
+    sec = SecClient(http=http, contact="t@example.com")
+
+    with pytest.raises(FathomError) as excinfo:
+        sec.lookup("AAPL")
+
+    err = excinfo.value
+    assert err.code == Code.SOURCE_HTTP
+    assert err.details["reason"] == "malformed response"
+    decoded = body.decode(errors="replace")
+    assert decoded not in str(err.details)
+    assert decoded not in err.message
+
+
+@pytest.mark.parametrize("body", _MALFORMED_BODIES, ids=_MALFORMED_IDS)
+def test_fr021_submissions_malformed_body_raises_source_http_malformed(
+    tmp_path: Path, body: bytes
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if url == "https://www.sec.gov/files/company_tickers.json":
+            return httpx.Response(200, content=_COMPANY_TICKERS)
+        if url == "https://data.sec.gov/submissions/CIK0000320193.json":
+            return httpx.Response(200, content=body)
+        return httpx.Response(404)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    http = LiveHttp(cache_dir=tmp_path, user_agent="Fathom/0.1.0 (t@example.com)", client=client)
+    sec = SecClient(http=http, contact="t@example.com")
+
+    with pytest.raises(FathomError) as excinfo:
+        sec.lookup("aapl")
+
+    err = excinfo.value
+    assert err.code == Code.SOURCE_HTTP
+    assert err.details["reason"] == "malformed response"
+    decoded = body.decode(errors="replace")
+    assert decoded not in str(err.details)
+    assert decoded not in err.message
+
+    with pytest.raises(FathomError) as excinfo2:
+        sec.filings("0000320193")
+
+    err2 = excinfo2.value
+    assert err2.code == Code.SOURCE_HTTP
+    assert err2.details["reason"] == "malformed response"
+
+
+@pytest.mark.parametrize("body", _MALFORMED_BODIES, ids=_MALFORMED_IDS)
+def test_fr021_filings_older_page_malformed_body_raises_source_http_malformed(
+    tmp_path: Path, body: bytes
+) -> None:
+    submissions = {
+        "name": "Sparse Filer Inc",
+        "exchanges": ["Nasdaq"],
+        "sicDescription": "Testing",
+        "fiscalYearEnd": "1231",
+        "filings": {
+            "recent": {
+                "form": ["4"],
+                "filingDate": ["2026-09-01"],
+                "reportDate": [""],
+                "accessionNumber": ["0000000005-26-000001"],
+                "primaryDocument": ["form4.xml"],
+            },
+            "files": [{"name": "CIK0000000005-submissions-001.json"}],
+        },
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if url == "https://data.sec.gov/submissions/CIK0000000005.json":
+            return httpx.Response(200, content=json.dumps(submissions).encode())
+        if url == "https://data.sec.gov/submissions/CIK0000000005-submissions-001.json":
+            return httpx.Response(200, content=body)
+        return httpx.Response(404)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    http = LiveHttp(cache_dir=tmp_path, user_agent="Fathom/0.1.0 (t@example.com)", client=client)
+    sec = SecClient(http=http, contact="t@example.com")
+
+    with pytest.raises(FathomError) as excinfo:
+        sec.filings("0000000005")
+
+    err = excinfo.value
+    assert err.code == Code.SOURCE_HTTP
+    assert err.details["reason"] == "malformed response"
+    decoded = body.decode(errors="replace")
+    assert decoded not in str(err.details)
+    assert decoded not in err.message
+
+
+def test_fr021_fuzz_mutated_submissions_and_ticker_map_raise_only_fathom_error(
+    tmp_path: Path,
+) -> None:
+    """Seeded 200-iteration random-byte mutation fuzz (T-024 AC2): only `FathomError` allowed."""
+    rng = random.Random(20240024)
+
+    def mutate(data: bytes) -> bytes:
+        mutable = bytearray(data)
+        for _ in range(rng.randint(1, 8)):
+            idx = rng.randrange(len(mutable))
+            mutable[idx] = rng.randrange(256)
+        return bytes(mutable)
+
+    for i in range(200):
+        mutate_ticker_map = i % 2 == 0
+        ticker_body = mutate(_COMPANY_TICKERS) if mutate_ticker_map else _COMPANY_TICKERS
+        submissions_body = _AAPL_SUBMISSIONS if mutate_ticker_map else mutate(_AAPL_SUBMISSIONS)
+
+        def handler(
+            request: httpx.Request, tb: bytes = ticker_body, sb: bytes = submissions_body
+        ) -> httpx.Response:
+            url = str(request.url)
+            if url == "https://www.sec.gov/files/company_tickers.json":
+                return httpx.Response(200, content=tb)
+            if url == "https://data.sec.gov/submissions/CIK0000320193.json":
+                return httpx.Response(200, content=sb)
+            return httpx.Response(404)
+
+        client = httpx.Client(transport=httpx.MockTransport(handler))
+        http = LiveHttp(
+            cache_dir=tmp_path / f"iter{i}",
+            user_agent="Fathom/0.1.0 (t@example.com)",
+            client=client,
+        )
+        sec = SecClient(http=http, contact="t@example.com")
+
+        try:
+            sec.lookup("AAPL")
+        except FathomError:
+            pass
+
+        try:
+            sec.filings("0000320193")
+        except FathomError:
+            pass

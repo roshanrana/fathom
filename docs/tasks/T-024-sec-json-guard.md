@@ -49,3 +49,10 @@ surfaces already map `SOURCE_HTTP` to 502 / exit 2 / `st.error`.
 B6 — combined final Verifier + Security review.
 
 ## Handoff (Implementer fills, ≤10 lines)
+Added `_decode_json(body, source)` in `sec.py`; routed `ticker_map`, `_submissions`, the
+paginated older-filings decode, and `company_concept` through it (removed dead
+`_malformed_concept_error`). Added AC1 tests (5 malformed bodies x ticker-map/submissions/
+older-page) and a seeded 200-iter mutation fuzz (seed 20240024) in `test_live_sec.py`.
+`grep json.loads fathom/live` shows only the one guarded call. Targeted: 42 passed. Full gate:
+456 passed (2 network tests skipped offline), 95.62% coverage, all clean. Updated
+`docs/SHOWCASE.md` figure 440->456; README.md has no gate-figure string.
