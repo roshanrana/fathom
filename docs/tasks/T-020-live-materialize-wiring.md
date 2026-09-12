@@ -77,3 +77,8 @@ Attempt 2: `quote_card`/`filings_for`/`build_context`/`data.company` pass `data_
 path (F1: `"../x"` raises before any dir is created). Added `SOURCE_CONFIG/HTTP/EMPTY` ->
 503/502/404 in `api.py` (F2), `test_nfr012_*`, and AC8 tests: mocked NFLX (non-UNIVERSE) works
 end to end (MockTransport/prepared-cache) on every surface. Gate green (415 tests, 95.65%).
+
+Attempt 3: F1 reopened by security review — `.match` let `"AAPL\n"` etc. pass the `$`-anchored
+regex; switched to `_LIVE_TICKER_RE.fullmatch(upper)` in `require_ticker` (sole helper used by
+`materialize`/`data_dir_for`). Added whitespace-padded-ticker tests, live and fixture/data_dir
+modes. Gate green (428 tests, 95.54% cov), no T-021 conflicts.

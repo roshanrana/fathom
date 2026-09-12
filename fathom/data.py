@@ -56,7 +56,7 @@ def require_ticker(
     shape is checked here; existence is deferred to `SecClient.lookup` when materialized.
     """
     upper = ticker.upper()
-    if not _LIVE_TICKER_RE.match(upper):
+    if not _LIVE_TICKER_RE.fullmatch(upper):
         raise FathomError(
             Code.UNKNOWN_TICKER,
             f"invalid ticker format {upper!r}",

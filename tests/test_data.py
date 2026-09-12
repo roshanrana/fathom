@@ -175,3 +175,25 @@ def test_fr020_ac8_data_dir_for_path_traversal_rejected_before_any_path_built(
 
     assert excinfo.value.code == Code.UNKNOWN_TICKER
     assert not (tmp_path / "live").exists()
+
+
+# --- F1 (attempt 3): trailing/leading whitespace no longer slips past the shape check --------
+
+
+@pytest.mark.parametrize("suffix_ticker", ["AAPL\n", "AAPL\r", " AAPL", "AAPL\t"])
+def test_f1_require_ticker_live_rejects_whitespace_padded_ticker(suffix_ticker: str) -> None:
+    """`$`-anchored regex let `.match` accept a trailing newline; `fullmatch` closes it."""
+    live_settings = Settings(data_source="live", sec_contact="t@example.com")
+    with pytest.raises(FathomError) as excinfo:
+        require_ticker(suffix_ticker, live_settings)
+    assert excinfo.value.code == Code.UNKNOWN_TICKER
+
+
+@pytest.mark.parametrize("suffix_ticker", ["AAPL\n", "AAPL\r", " AAPL", "AAPL\t"])
+def test_f1_require_ticker_fixture_data_dir_rejects_whitespace_padded_ticker(
+    suffix_ticker: str, data_dir: Path
+) -> None:
+    """The same whitespace-padded tickers must not match in `data_dir` (fixture) mode either."""
+    with pytest.raises(FathomError) as excinfo:
+        require_ticker(suffix_ticker, data_dir=data_dir)
+    assert excinfo.value.code == Code.UNKNOWN_TICKER
