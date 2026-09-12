@@ -160,24 +160,30 @@ def _matching(
 def _numeric_val(
     entry: dict[str, object], *, is_valid: Callable[[float], bool] | None = None
 ) -> float | None:
-    val = entry.get("val")
-    if isinstance(val, bool) or not isinstance(val, int | float):
+    # T-023 attempt 3: whole-body guard, same rationale as the Yahoo/Stooq parse helpers in
+    # prices.py — this parses an untrusted fact dict, so any failure (not just the exception
+    # types anticipated up front) is treated as "this fact is unusable", never propagated.
+    try:
+        val = entry.get("val")
+        if isinstance(val, bool) or not isinstance(val, int | float):
+            return None
+        value = float(val)
+        if not math.isfinite(value):
+            return None
+        if is_valid is not None and not is_valid(value):
+            return None
+        return value
+    except Exception:  # noqa: BLE001 - whole-body parse guard, see above
         return None
-    value = float(val)
-    if not math.isfinite(value):
-        return None
-    if is_valid is not None and not is_valid(value):
-        return None
-    return value
 
 
 def _end_date(entry: dict[str, object]) -> date | None:
-    raw = entry.get("end")
-    if not isinstance(raw, str):
-        return None
     try:
+        raw = entry.get("end")
+        if not isinstance(raw, str):
+            return None
         return date.fromisoformat(raw)
-    except ValueError:
+    except Exception:  # noqa: BLE001 - whole-body parse guard, see _numeric_val above
         return None
 
 

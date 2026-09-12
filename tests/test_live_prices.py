@@ -355,3 +355,88 @@ def test_fr022_yahoo_drops_rows_with_null_close(tmp_path: Path) -> None:
 
     assert len(frame) == 1
     assert frame["close"].iloc[0] == 2.2
+
+
+@pytest.mark.parametrize("bad_ts", [10**18, -1, 4102444801], ids=["huge", "negative", "just-over"])
+def test_fr023_yahoo_out_of_range_timestamp_drops_row_falls_back_to_stooq(
+    tmp_path: Path, bad_ts: int
+) -> None:
+    """A single bad-timestamp row leaves zero valid bars -> source failure -> Stooq fallback."""
+    body = (
+        f'{{"chart": {{"result": [{{"timestamp": [{bad_ts}], '
+        '"indicators": {"quote": [{"open": [1.0], "high": [1.5], '
+        '"low": [0.5], "close": [1.1], "volume": [100]}]}}]}}'
+    ).encode()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url).startswith(_YAHOO_HOST):
+            return httpx.Response(200, content=body)
+        return _stooq_ok(request)
+
+    client, calls = _make_client(tmp_path, handler)
+
+    frame = client.daily_bars("AAPL")
+
+    assert client.last_source == "stooq"
+    assert any(str(c.url).startswith(_STOOQ_HOST) for c in calls)
+    assert len(frame) == 30
+
+
+def test_fr023_yahoo_out_of_range_timestamp_drops_only_that_row(tmp_path: Path) -> None:
+    """A bad timestamp alongside a good one drops just the bad row; no fallback needed."""
+    body = (
+        b'{"chart": {"result": [{"timestamp": [1700000000, -1], '
+        b'"indicators": {"quote": [{"open": [1.0, 2.0], "high": [1.5, 2.5], '
+        b'"low": [0.5, 1.5], "close": [1.1, 2.2], "volume": [100, 200]}]}}]}}'
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=body)
+
+    client, calls = _make_client(tmp_path, handler)
+
+    frame = client.daily_bars("AAPL")
+
+    assert len(frame) == 1
+    assert frame["close"].iloc[0] == 1.1
+    assert client.last_source == "yahoo"
+    assert len(calls) == 1
+
+
+def test_fr023_yahoo_fromtimestamp_oserror_yields_fathomerror_not_raw_oserror(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Even an in-bounds timestamp can hit a raising `datetime.fromtimestamp`; must not escape."""
+    import fathom.live.prices as prices_module
+
+    class _FailingDatetime:
+        @staticmethod
+        def fromtimestamp(ts: object, tz: object = None) -> dt.datetime:
+            raise OSError("mock: fromtimestamp failure")
+
+        @staticmethod
+        def strptime(value: str, fmt: str) -> dt.datetime:
+            return dt.datetime.strptime(value, fmt)
+
+    monkeypatch.setattr(prices_module, "datetime", _FailingDatetime)
+
+    yahoo_body = (
+        b'{"chart": {"result": [{"timestamp": [1700000000], '
+        b'"indicators": {"quote": [{"open": [1.0], "high": [1.5], '
+        b'"low": [0.5], "close": [1.1], "volume": [100]}]}}]}}'
+    )
+    stooq_body = b"Date,Open,High,Low,Close,Volume\nbad,bad,bad,bad,bad,bad\n"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url).startswith(_YAHOO_HOST):
+            return httpx.Response(200, content=yahoo_body)
+        return httpx.Response(200, content=stooq_body)
+
+    client, calls = _make_client(tmp_path, handler)
+
+    with pytest.raises(FathomError) as excinfo:
+        client.daily_bars("AAPL")
+
+    assert excinfo.value.code == Code.SOURCE_HTTP
+    assert excinfo.value.details["reason"] == "malformed response"
+    assert any(str(c.url).startswith(_STOOQ_HOST) for c in calls)

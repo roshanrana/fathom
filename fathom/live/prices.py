@@ -32,18 +32,11 @@ _BAR_COLUMNS = ["symbol", "date", "open", "high", "low", "close", "volume"]
 _FLOAT_COLUMNS = ("open", "high", "low", "close", "volume")
 _MAX_STOOQ_ROWS = 10_000
 _TICKER_RE = re.compile(r"^[A-Z0-9.\-]{1,10}$")
-# T-023/T-019 F1, F2: any of these raised while parsing a Yahoo/Stooq body is a source failure
-# (triggers the other source's fallback), never an uncaught exception.
-# T-023 attempt 2 F1: AttributeError added (a malformed Yahoo shape can be a truthy non-dict that
-# still passes a type-checker-only cast, so `.get()` on it raises AttributeError, not KeyError).
-_PARSE_GUARD_EXCEPTIONS = (
-    TypeError,
-    ValueError,
-    KeyError,
-    IndexError,
-    AttributeError,
-    json.JSONDecodeError,
-)
+# T-023 attempt 3: a timestamp outside [0, 4102444800] (2100-01-01T00:00:00Z) is dropped before
+# ever reaching `datetime.fromtimestamp`, which otherwise raises OSError/OverflowError on
+# platform-dependent extreme values (attempt-3 HIGH finding).
+_MAX_YAHOO_TIMESTAMP = 4_102_444_800
+_MIN_YAHOO_TIMESTAMP = 0
 
 PriceSource = Literal["yahoo", "stooq"]
 
@@ -98,6 +91,10 @@ class PriceClient:
     def _yahoo(self, ticker: str) -> pd.DataFrame:
         url = _YAHOO_URL.format(symbol=_yahoo_symbol(ticker))
         body = self._http.get(url, ttl_hours=_BARS_TTL_HOURS, source="yahoo")
+        # T-023 attempt 3: the whole parse is I/O-free and has no control flow that should
+        # propagate, so any failure (including exception types not anticipated by an enumerated
+        # tuple, e.g. the OSError/OverflowError previously reachable via `datetime.fromtimestamp`)
+        # becomes a plain source failure rather than an uncaught exception.
         try:
             payload = json.loads(body)
             result = payload["chart"]["result"][0]
@@ -107,7 +104,7 @@ class PriceClient:
             if not isinstance(result, dict):
                 raise TypeError("yahoo result is not a dict")
             frame = self._bars_from_yahoo(ticker, result)
-        except _PARSE_GUARD_EXCEPTIONS as exc:
+        except Exception as exc:  # noqa: BLE001 - deliberate whole-body parse guard, see above
             raise _malformed_response_error("yahoo") from exc
         if frame.empty:
             raise _malformed_response_error("yahoo")
@@ -132,6 +129,8 @@ class PriceClient:
 
         rows: list[dict[str, object]] = []
         for i, ts in enumerate(timestamps):
+            if _is_out_of_range_yahoo_timestamp(ts):
+                continue
             close = closes[i] if i < len(closes) else None
             close_value = _valid_close(close)
             if close_value is None:
@@ -162,7 +161,7 @@ class PriceClient:
 
         try:
             csv_frame = pd.read_csv(io.StringIO(text), nrows=_MAX_STOOQ_ROWS)
-        except _PARSE_GUARD_EXCEPTIONS as exc:
+        except Exception as exc:  # noqa: BLE001 - whole-body parse guard, see _yahoo above
             raise _malformed_response_error("stooq") from exc
 
         rows: list[dict[str, object]] = []
@@ -175,6 +174,23 @@ class PriceClient:
         if frame.empty:
             raise _malformed_response_error("stooq")
         return frame
+
+
+def _is_out_of_range_yahoo_timestamp(ts: object) -> bool:
+    """True only for a *numeric* Yahoo timestamp outside [0, 4102444800] (2100-01-01T00:00:00Z).
+
+    Rejecting these here (T-023 attempt 3) drops just that row before it ever reaches
+    `datetime.fromtimestamp`, which otherwise raises `OSError`/`OverflowError` on
+    platform-dependent extreme values (e.g. `10**18`, `-1`, or a value just past the bound).
+    A non-numeric `ts` (e.g. `None`) is left alone: it still reaches `datetime.fromtimestamp`
+    and raises there, which the whole-body guard in `_yahoo()` converts to a source failure —
+    preserving the earlier T-019/T-023 behavior for a malformed (not merely out-of-range) shape.
+    """
+    if isinstance(ts, bool) or not isinstance(ts, int | float):
+        return False
+    if not math.isfinite(ts):
+        return True
+    return not (_MIN_YAHOO_TIMESTAMP <= ts <= _MAX_YAHOO_TIMESTAMP)
 
 
 def _malformed_response_error(source: str) -> FathomError:
@@ -227,7 +243,7 @@ def _parse_stooq_row(ticker: str, row: pd.Series) -> dict[str, object] | None:
             "close": close_value,
             "volume": _required_float(row["Volume"]),
         }
-    except _PARSE_GUARD_EXCEPTIONS:
+    except Exception:  # noqa: BLE001 - whole-body parse guard, see _yahoo above
         return None
 
 

@@ -79,3 +79,9 @@ Attempt 2: Closed both new HIGHs. F1: `isinstance(dict/list)` checks on Yahoo
 `_TICKER_RE`/`_CIK_RE` now use `.fullmatch` (not `.match`+`$`), so "AAPL\n"/"0000320193\n" are
 rejected pre-request, 0 calls — http.py untouched (no InvalidURL path reachable, out of scope).
 5 new tests; targeted 35/35, mypy clean, full gate all green (390 passed).
+
+Attempt 3: Closed the new HIGH. `_yahoo`/`_stooq`/`_parse_stooq_row` and facts.py's
+`_numeric_val`/`_end_date` now guard their whole body with `except Exception` instead of an
+enumerated tuple; Yahoo timestamps outside [0, 4102444800] drop that row pre-conversion (non-numeric
+`ts` still falls through to the existing fallback path). 4 new tests; targeted 40/40, mypy clean,
+full gate green (420 passed).
