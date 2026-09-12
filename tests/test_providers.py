@@ -80,6 +80,34 @@ def test_fr010_portkey_provider_missing_usage_yields_none_tokens() -> None:
     assert result.output_tokens is None
 
 
+@pytest.mark.parametrize(
+    "usage",
+    [
+        {"prompt_tokens": "12", "completion_tokens": "34"},
+        {"prompt_tokens": None, "completion_tokens": None},
+        {"prompt_tokens": 1.5, "completion_tokens": [1]},
+        {"prompt_tokens": True, "completion_tokens": False},
+    ],
+)
+def test_fr010_portkey_non_int_usage_values_yield_none_tokens(usage: dict[str, object]) -> None:
+    """T-015 AC2: a non-int usage field is coerced to None rather than raising."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "hi"}}], "usage": usage},
+        )
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    settings = Settings(llm_provider="portkey", portkey_api_key="k")
+    provider = make_provider(settings, client=client)
+
+    result = provider.complete_json("s", "u", 100)
+
+    assert result.input_tokens is None
+    assert result.output_tokens is None
+
+
 # --- AC2: AnthropicProvider request/response shape -----------------------------------------------
 
 
@@ -118,6 +146,34 @@ def test_fr010_anthropic_provider_posts_expected_request_and_parses_response() -
     assert result.input_tokens == 5
     assert result.output_tokens == 7
     assert result.latency_ms >= 0
+
+
+@pytest.mark.parametrize(
+    "usage",
+    [
+        {"input_tokens": "5", "output_tokens": "7"},
+        {"input_tokens": None, "output_tokens": None},
+        {"input_tokens": 1.5, "output_tokens": [1]},
+        {"input_tokens": True, "output_tokens": False},
+    ],
+)
+def test_fr010_anthropic_non_int_usage_values_yield_none_tokens(usage: dict[str, object]) -> None:
+    """T-015 AC2: a non-int usage field is coerced to None rather than raising."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"content": [{"type": "text", "text": "hi"}], "usage": usage},
+        )
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    settings = Settings(llm_provider="anthropic", anthropic_api_key="k")
+    provider = make_provider(settings, client=client)
+
+    result = provider.complete_json("s", "u", 100)
+
+    assert result.input_tokens is None
+    assert result.output_tokens is None
 
 
 # --- AC3: non-2xx -> PROVIDER_HTTP; timeout -> PROVIDER_TIMEOUT; no leakage ----------------------
@@ -262,6 +318,14 @@ _PORTKEY_MALFORMED_BODIES = [
     json.dumps({"foo": 1}),
     "not json",
     json.dumps({"choices": [{"message": {}}]}),
+    json.dumps({"choices": [{"message": {"content": None}}]}),
+    json.dumps({"choices": [{"message": {"content": 42}}]}),
+    json.dumps({"choices": [{"message": {"content": ["hi"]}}]}),
+    json.dumps([1, 2, 3]),
+    json.dumps(None),
+    json.dumps("just a string"),
+    json.dumps(42),
+    json.dumps(True),
 ]
 
 
@@ -297,6 +361,14 @@ _ANTHROPIC_MALFORMED_BODIES = [
     json.dumps({"foo": 1}),
     "not json",
     json.dumps({"content": [{"type": "text"}]}),
+    json.dumps({"content": [{"type": "text", "text": None}]}),
+    json.dumps({"content": [{"type": "text", "text": 42}]}),
+    json.dumps({"content": [{"type": "text", "text": ["hi"]}]}),
+    json.dumps([1, 2, 3]),
+    json.dumps(None),
+    json.dumps("just a string"),
+    json.dumps(42),
+    json.dumps(True),
 ]
 
 

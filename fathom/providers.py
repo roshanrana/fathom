@@ -89,17 +89,28 @@ def _malformed_response_error(name: str, status: int) -> FathomError:
     )
 
 
+def _coerce_int(value: Any) -> int | None:
+    """A usage counter that isn't a plain int is treated as absent, not an error (T-015 AC2)."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value
+
+
 def _parse_portkey_payload(
     name: str, response: httpx.Response
 ) -> tuple[str, dict[str, Any] | None]:
     """Decode the 2xx body and pull out the completion text; never leaks the body."""
     try:
         payload = response.json()
+        if not isinstance(payload, dict):
+            raise TypeError("top-level body is not an object")
         text = payload["choices"][0]["message"]["content"]
+        if not isinstance(text, str):
+            raise TypeError("content is not a string")
     except (json.JSONDecodeError, KeyError, IndexError, TypeError) as exc:
         raise _malformed_response_error(name, response.status_code) from exc
     usage = payload.get("usage")
-    return text, usage
+    return text, usage if isinstance(usage, dict) else None
 
 
 def _parse_anthropic_payload(
@@ -108,11 +119,15 @@ def _parse_anthropic_payload(
     """Decode the 2xx body and pull out the completion text; never leaks the body."""
     try:
         payload = response.json()
+        if not isinstance(payload, dict):
+            raise TypeError("top-level body is not an object")
         text = payload["content"][0]["text"]
+        if not isinstance(text, str):
+            raise TypeError("content text is not a string")
     except (json.JSONDecodeError, KeyError, IndexError, TypeError) as exc:
         raise _malformed_response_error(name, response.status_code) from exc
     usage = payload.get("usage")
-    return text, usage
+    return text, usage if isinstance(usage, dict) else None
 
 
 class PortkeyProvider:
@@ -157,8 +172,8 @@ class PortkeyProvider:
         if not (200 <= response.status_code < 300):
             raise _http_status_error(self.name, response.status_code)
         text, usage = _parse_portkey_payload(self.name, response)
-        input_tokens = usage.get("prompt_tokens") if usage else None
-        output_tokens = usage.get("completion_tokens") if usage else None
+        input_tokens = _coerce_int(usage.get("prompt_tokens")) if usage else None
+        output_tokens = _coerce_int(usage.get("completion_tokens")) if usage else None
         return ProviderResult(
             text=text,
             input_tokens=input_tokens,
@@ -209,8 +224,8 @@ class AnthropicProvider:
         if not (200 <= response.status_code < 300):
             raise _http_status_error(self.name, response.status_code)
         text, usage = _parse_anthropic_payload(self.name, response)
-        input_tokens = usage.get("input_tokens") if usage else None
-        output_tokens = usage.get("output_tokens") if usage else None
+        input_tokens = _coerce_int(usage.get("input_tokens")) if usage else None
+        output_tokens = _coerce_int(usage.get("output_tokens")) if usage else None
         return ProviderResult(
             text=text,
             input_tokens=input_tokens,

@@ -68,3 +68,10 @@ x2 providers, malformed-body parametrized x2 providers; cli: monkeypatched-trans
 exit-2 case) and test_fr013_* (no-source text + unchanged JSON rendering) in
 tests/test_providers.py / tests/test_cli.py. Full gate green (257 tests, mypy strict both
 platforms, ruff, no secrets, bench/card drift clean). Not touched: no new deps; scope respected.
+
+Attempt 2: AC2 fix — `_parse_portkey_payload`/`_parse_anthropic_payload` now require
+`isinstance(text, str)` and `isinstance(payload, dict)` (top-level body), raising
+`_malformed_response_error` otherwise; usage counts coerced via new `_coerce_int` (non-int/bool ->
+None) instead of failing. Added parametrized tests for null/non-string content (both providers),
+non-dict top-level bodies (list/null/str/int/bool), and non-int usage fields. Full gate green
+(287 tests, mypy clean, ruff, ~96% coverage). OfflineProvider untouched.
