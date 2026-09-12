@@ -366,7 +366,14 @@ plus `"question": str`.
 ### 6.3 Offline extractive provider (deterministic)
 Parses the user JSON. Sentence split: `re.split(r"(?<=[.!?])\s+", text)`; a sentence qualifies
 when it has 8–60 words, is not all upper-case, and contains fewer than four numeric tokens (drops
-table rows). Briefing: `business_snapshot` ← first 3 qualifying sentences of the 10-K `10-K:1`;
+table rows). D-011 refinements: (a) if a sentence contains a newline, only the text after its
+last newline is kept, and it must still qualify (drops heading fragments such as "Business
+Company Background" glued to the first sentence); (b) sentences containing, case-insensitively,
+"forward-looking", "Private Securities Litigation Reform Act", "this Item and other sections",
+"safe harbor" or "should be read in conjunction" are skipped (boilerplate); (c) a sentence
+already used as a claim anywhere in the briefing is not reused in a later section (talking
+points excepted, as they quote earlier claims by design); (d) sentences are trimmed of leading
+"Item N." / "Item NA." prefixes. Briefing: `business_snapshot` ← first 3 qualifying sentences of the 10-K `10-K:1`;
 `latest_results` ← first 4 of the newest `10-Q:I.2` (else `10-K:7`); `risks` ← first 4 of
 `10-K:1A`; `liquidity_capital` ← first 3 sentences of the newest `10-Q:I.2` (else `10-K:7`)
 containing "liquidity" or "cash" (case-insensitive), else first 2 qualifying; `notable_disclosures`

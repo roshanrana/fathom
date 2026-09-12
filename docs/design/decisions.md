@@ -153,3 +153,16 @@ review), which also tidies the CLI rendering of guarded claims ("(no source)" in
 Consequences: live-mode outages show `error PROVIDER_HTTP: … reason=ConnectError` and the
 runbook's fallback advice applies; the T-004 MEDIUM closes.
 Approver: Architecture lead (standing authorisation, D-000).
+
+## D-011 — Demo-quality polish: offline sentence heuristics and quote-card formatting   (2026-09-12, phase 7, status: accepted)
+Context: Reviewing the T-011 screenshots: the offline "Latest results" section opens with
+forward-looking-statement boilerplate, heading fragments are glued to first sentences ("Business
+Company Background The Company designs…"), the same legal-proceedings sentence appears twice,
+and `st.metric` truncates long values ("228.1…", "4,849,…").
+Decision: LLD §6.3 gains four deterministic heuristics (newline-tail, boilerplate skip, no reuse,
+Item-prefix trim); the page formats market cap as "$4.85 T"/"$412 B", shows the 52-week range as
+two metrics (low / high), and moves the long source strings into one caption line under the
+metric row ("Prices: AlphaDojo/dojo_stock_kline as of 2026-09-11 · Snapshot: AlphaDojo/dojo_quote
+as of 2026-09-11 16:00 UTC"). Delivered by T-016 (risk low). Verified share stays 1.0 by
+construction; bench claims counts change and metrics are regenerated.
+Approver: Architecture lead (standing authorisation, D-000).
