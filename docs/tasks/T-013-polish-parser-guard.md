@@ -9,7 +9,7 @@ reasoning: on
 budget: {input_tokens: 80000, tool_calls: 80, wall_clock_min: 120}
 depends_on: [T-006, T-007, T-010]
 rtm: [FR-005, FR-008, FR-015, FR-018, NFR-007, NFR-008]
-status: todo
+status: verify
 ---
 # T-013 — Polish: parser heading fallback, guard inflections, metrics regen
 

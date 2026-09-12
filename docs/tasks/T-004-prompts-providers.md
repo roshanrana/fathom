@@ -9,7 +9,7 @@ reasoning: on
 budget: {input_tokens: 80000, tool_calls: 80, wall_clock_min: 120}
 depends_on: [T-000]
 rtm: [FR-010, NFR-005, NFR-010]
-status: todo
+status: done
 ---
 # T-004 — Prompts and providers
 

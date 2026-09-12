@@ -9,7 +9,7 @@ reasoning: off
 budget: {input_tokens: 40000, tool_calls: 40, wall_clock_min: 45}
 depends_on: [T-003, T-004, T-005]
 rtm: [FR-009]
-status: todo
+status: done
 ---
 # T-007 — Grounded Q&A
 

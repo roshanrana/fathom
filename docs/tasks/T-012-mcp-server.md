@@ -9,7 +9,7 @@ reasoning: off
 budget: {input_tokens: 40000, tool_calls: 40, wall_clock_min: 45}
 depends_on: [T-006, T-007]
 rtm: [FR-019]
-status: todo
+status: done
 ---
 # T-012 — MCP server (Could)
 

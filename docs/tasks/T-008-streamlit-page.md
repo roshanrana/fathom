@@ -9,7 +9,7 @@ reasoning: on
 budget: {input_tokens: 80000, tool_calls: 80, wall_clock_min: 120}
 depends_on: [T-001, T-006, T-007]
 rtm: [FR-012, NFR-011]
-status: todo
+status: done
 ---
 # T-008 — Streamlit page
 

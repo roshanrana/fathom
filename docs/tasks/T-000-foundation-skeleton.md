@@ -8,8 +8,8 @@ complexity: high
 reasoning: on
 budget: {input_tokens: 80000, tool_calls: 80, wall_clock_min: 120}
 depends_on: []
-rtm: [NFR-003, NFR-005, NFR-009, FR-001]
-status: todo
+rtm: [NFR-003, NFR-005, NFR-009, FR-001, FR-016]
+status: done
 ---
 # T-000 — Foundation and walking skeleton
 

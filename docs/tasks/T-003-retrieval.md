@@ -9,7 +9,7 @@ reasoning: off
 budget: {input_tokens: 40000, tool_calls: 40, wall_clock_min: 45}
 depends_on: [T-002]
 rtm: [FR-009]
-status: todo
+status: done
 ---
 # T-003 — BM25 retrieval
 

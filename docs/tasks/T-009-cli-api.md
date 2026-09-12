@@ -9,7 +9,7 @@ reasoning: on
 budget: {input_tokens: 80000, tool_calls: 80, wall_clock_min: 120}
 depends_on: [T-001, T-006, T-007]
 rtm: [FR-013, FR-014]
-status: todo
+status: done
 ---
 # T-009 — CLI and HTTP API
 

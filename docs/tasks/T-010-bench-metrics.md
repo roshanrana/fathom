@@ -9,7 +9,7 @@ reasoning: on
 budget: {input_tokens: 80000, tool_calls: 80, wall_clock_min: 120}
 depends_on: [T-003, T-006, T-007]
 rtm: [FR-015, NFR-001, NFR-004, NFR-007, NFR-008]
-status: todo
+status: done
 ---
 # T-010 — Bench and metrics card
 

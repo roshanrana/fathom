@@ -9,7 +9,7 @@ reasoning: off
 budget: {input_tokens: 40000, tool_calls: 40, wall_clock_min: 45}
 depends_on: [T-000]
 rtm: [FR-002, FR-003]
-status: todo
+status: done
 ---
 # T-001 — Quote card and price context
 

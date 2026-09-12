@@ -9,7 +9,7 @@ reasoning: on
 budget: {input_tokens: 80000, tool_calls: 80, wall_clock_min: 120}
 depends_on: [T-002, T-004, T-005]
 rtm: [FR-006, FR-007, FR-018, NFR-007]
-status: todo
+status: done
 ---
 # T-006 — Briefing pipeline
 

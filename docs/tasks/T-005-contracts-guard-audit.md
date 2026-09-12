@@ -9,7 +9,7 @@ reasoning: on
 budget: {input_tokens: 80000, tool_calls: 80, wall_clock_min: 120}
 depends_on: [T-002]
 rtm: [FR-007, FR-008, FR-011, NFR-006, NFR-008]
-status: todo
+status: done
 ---
 # T-005 — Contracts, guard and audit
 

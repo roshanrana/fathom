@@ -9,7 +9,7 @@ reasoning: on
 budget: {input_tokens: 80000, tool_calls: 80, wall_clock_min: 120}
 depends_on: [T-008, T-009, T-010]
 rtm: [FR-017]
-status: todo
+status: verify
 ---
 # T-011 — Documentation and screenshots
 
