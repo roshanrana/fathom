@@ -306,3 +306,59 @@ def test_fr023_all_four_concepts_are_fetched(tmp_path: Path, concept: str) -> No
 
     assert any(concept in url for url in calls)
     assert len(calls) == 4
+
+
+class _StubSecReturns:
+    """Stands in for `SecClient`, returning a fixed (possibly malformed) payload."""
+
+    def __init__(self, payload: object) -> None:
+        self._payload = payload
+
+    def company_concept(self, cik: str, taxonomy: str, concept: str) -> dict[str, object]:
+        del cik, taxonomy, concept
+        return self._payload  # type: ignore[return-value]
+
+
+class _StubSecRaises:
+    """Stands in for `SecClient`, always raising the given `FathomError`."""
+
+    def __init__(self, error: FathomError) -> None:
+        self._error = error
+
+    def company_concept(self, cik: str, taxonomy: str, concept: str) -> dict[str, object]:
+        del cik, taxonomy, concept
+        raise self._error
+
+
+@pytest.mark.parametrize(
+    "payload",
+    ["str", [], None, 42, True],
+    ids=["json-string", "json-list", "json-null", "json-int", "json-bool"],
+)
+def test_fr023_snapshot_malformed_concept_payload_yields_none_fields_no_raise(
+    payload: object,
+) -> None:
+    sec = _StubSecReturns(payload)
+
+    result = snapshot(sec, _CIK, last_close=_LAST_CLOSE, quote_time=_QUOTE_TIME)  # type: ignore[arg-type]
+
+    assert result["market_cap"] is None
+    assert result["pe"] is None
+    assert result["pb"] is None
+    assert result["dividend_yield"] == 0.0
+
+
+def test_fr023_snapshot_concept_source_http_raise_yields_none_fields_no_raise() -> None:
+    error = FathomError(
+        Code.SOURCE_HTTP,
+        "sec companyconcept response could not be parsed",
+        {"source": "sec", "status": 200, "reason": "malformed response"},
+    )
+    sec = _StubSecRaises(error)
+
+    result = snapshot(sec, _CIK, last_close=_LAST_CLOSE, quote_time=_QUOTE_TIME)  # type: ignore[arg-type]
+
+    assert result["market_cap"] is None
+    assert result["pe"] is None
+    assert result["pb"] is None
+    assert result["dividend_yield"] == 0.0

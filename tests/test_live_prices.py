@@ -403,6 +403,27 @@ def test_fr023_yahoo_out_of_range_timestamp_drops_only_that_row(tmp_path: Path) 
     assert len(calls) == 1
 
 
+def test_fr023_yahoo_bool_timestamp_drops_only_that_row(tmp_path: Path) -> None:
+    """A `true` timestamp (JSON bool) is out of range, not accepted as 0/1 (T-023 attempt 4 LOW)."""
+    body = (
+        b'{"chart": {"result": [{"timestamp": [1700000000, true], '
+        b'"indicators": {"quote": [{"open": [1.0, 2.0], "high": [1.5, 2.5], '
+        b'"low": [0.5, 1.5], "close": [1.1, 2.2], "volume": [100, 200]}]}}]}}'
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=body)
+
+    client, calls = _make_client(tmp_path, handler)
+
+    frame = client.daily_bars("AAPL")
+
+    assert len(frame) == 1
+    assert frame["close"].iloc[0] == 1.1
+    assert client.last_source == "yahoo"
+    assert len(calls) == 1
+
+
 def test_fr023_yahoo_fromtimestamp_oserror_yields_fathomerror_not_raw_oserror(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

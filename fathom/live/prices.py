@@ -185,8 +185,14 @@ def _is_out_of_range_yahoo_timestamp(ts: object) -> bool:
     A non-numeric `ts` (e.g. `None`) is left alone: it still reaches `datetime.fromtimestamp`
     and raises there, which the whole-body guard in `_yahoo()` converts to a source failure —
     preserving the earlier T-019/T-023 behavior for a malformed (not merely out-of-range) shape.
+
+    T-023 attempt 4 LOW: `bool` is excluded from "acceptable" here (treated as out of range,
+    same as any other non-numeric shape) rather than silently accepted as 0/1, matching
+    `_valid_close`/`_safe_float` elsewhere in this file which already special-case `bool`.
     """
-    if isinstance(ts, bool) or not isinstance(ts, int | float):
+    if isinstance(ts, bool):
+        return True
+    if not isinstance(ts, int | float):
         return False
     if not math.isfinite(ts):
         return True

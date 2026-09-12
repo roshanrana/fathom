@@ -69,6 +69,7 @@ class SecFiling(BaseModel):
 
 _ACCESSION_RE = re.compile(r"^\d{10}-\d{2}-\d{6}$")
 _SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$")
+_CONCEPT_IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9_-]{1,80}$")
 
 
 def _invalid_edgar_field_error() -> FathomError:
@@ -88,6 +89,29 @@ def _validate_accession(accession: str) -> None:
 def _validate_safe_name(name: str) -> None:
     if ".." in name or not _SAFE_NAME_RE.match(name):
         raise _invalid_edgar_field_error()
+
+
+def _invalid_concept_identifier_error() -> FathomError:
+    """SOURCE_HTTP for a `taxonomy`/`concept` that fails the safe-identifier pattern."""
+    return FathomError(
+        Code.SOURCE_HTTP,
+        "invalid taxonomy/concept identifier supplied to company_concept",
+        {"source": "sec", "status": 0, "reason": "invalid identifier"},
+    )
+
+
+def _validate_concept_identifier(value: str) -> None:
+    if not _CONCEPT_IDENTIFIER_RE.fullmatch(value):
+        raise _invalid_concept_identifier_error()
+
+
+def _malformed_concept_error() -> FathomError:
+    """SOURCE_HTTP for a companyconcept body that fails to decode into a JSON object."""
+    return FathomError(
+        Code.SOURCE_HTTP,
+        "sec companyconcept response could not be parsed",
+        {"source": "sec", "status": 200, "reason": "malformed response"},
+    )
 
 
 def _document_url(cik: str, accession: str, primary_document: str) -> str:
@@ -260,10 +284,25 @@ class SecClient:
         return html_to_text(body.decode("utf-8", errors="replace"))
 
     def company_concept(self, cik: str, taxonomy: str, concept: str) -> dict[str, object]:
-        """Raw XBRL companyconcept facts for `cik`/`taxonomy`/`concept` (used by T-019)."""
+        """Raw XBRL companyconcept facts for `cik`/`taxonomy`/`concept` (used by T-019).
+
+        Validates `taxonomy`/`concept` against a safe-identifier pattern before building the
+        URL (`SOURCE_HTTP` reason "invalid identifier", zero requests on failure). The response
+        body is decoded inside a guard: anything that fails to parse into a JSON object (a
+        non-dict top-level value, or non-JSON text) raises `SOURCE_HTTP` reason "malformed
+        response", with no body/URL text in the error (T-023 attempt 4 HIGH).
+        """
+        _validate_concept_identifier(taxonomy)
+        _validate_concept_identifier(concept)
         url = _COMPANY_CONCEPT_URL.format(cik=cik, taxonomy=taxonomy, concept=concept)
         body = self._http.get(url, ttl_hours=_FACTS_TTL_HOURS, source="sec")
-        return cast(dict[str, object], json.loads(body))
+        try:
+            payload = json.loads(body)
+            if not isinstance(payload, dict):
+                raise TypeError("companyconcept payload is not a JSON object")
+        except Exception as exc:  # noqa: BLE001 - whole-body parse guard, see docstring
+            raise _malformed_concept_error() from exc
+        return cast(dict[str, object], payload)
 
     def _submissions(self, cik: str) -> dict[str, object]:
         url = _SUBMISSIONS_URL.format(cik=cik)

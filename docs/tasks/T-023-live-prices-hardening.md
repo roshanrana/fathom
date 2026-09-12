@@ -85,3 +85,11 @@ Attempt 3: Closed the new HIGH. `_yahoo`/`_stooq`/`_parse_stooq_row` and facts.p
 enumerated tuple; Yahoo timestamps outside [0, 4102444800] drop that row pre-conversion (non-numeric
 `ts` still falls through to the existing fallback path). 4 new tests; targeted 40/40, mypy clean,
 full gate green (420 passed).
+
+Attempt 4: Closed both findings. HIGH: `SecClient.company_concept` now validates
+`taxonomy`/`concept` against `^[A-Za-z0-9_-]{1,80}$` pre-URL (SOURCE_HTTP "invalid identifier",
+0 requests) and decodes the body in a guard requiring `isinstance(payload, dict)` (else
+SOURCE_HTTP "malformed response", no body); `facts._fetch_concept` now wraps the whole call in
+`except Exception` so any failure (incl. `FathomError`) is "concept missing" (None) — `snapshot`
+never raises for data reasons. LOW: `_is_out_of_range_yahoo_timestamp` now special-cases `bool`
+as out-of-range. 8 new tests; targeted 73/73, mypy clean, full gate green (442 passed).

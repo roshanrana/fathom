@@ -429,3 +429,50 @@ def test_fr021_company_concept_returns_parsed_json(tmp_path: Path) -> None:
     result = sec.company_concept("0000320193", "us-gaap", "EarningsPerShareDiluted")
 
     assert result["units"]["USD"][0]["val"] == 1
+
+
+@pytest.mark.parametrize(
+    "body",
+    [b'"str"', b"[]", b"null", b"not json"],
+    ids=["json-string", "json-list", "json-null", "non-json"],
+)
+def test_fr023_company_concept_malformed_body_raises_source_http_malformed(
+    tmp_path: Path, body: bytes
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=body)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    http = LiveHttp(cache_dir=tmp_path, user_agent="Fathom/0.1.0 (t@example.com)", client=client)
+    sec = SecClient(http=http, contact="t@example.com")
+
+    with pytest.raises(FathomError) as excinfo:
+        sec.company_concept("0000320193", "us-gaap", "EarningsPerShareDiluted")
+
+    err = excinfo.value
+    assert err.code == Code.SOURCE_HTTP
+    assert err.details["reason"] == "malformed response"
+    assert body.decode(errors="replace") not in str(err.details)
+    assert body.decode(errors="replace") not in err.message
+
+
+def test_fr023_company_concept_invalid_taxonomy_raises_invalid_identifier_zero_requests(
+    tmp_path: Path,
+) -> None:
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(200, content=b"{}")
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    http = LiveHttp(cache_dir=tmp_path, user_agent="Fathom/0.1.0 (t@example.com)", client=client)
+    sec = SecClient(http=http, contact="t@example.com")
+
+    with pytest.raises(FathomError) as excinfo:
+        sec.company_concept("0000320193", "../x", "EarningsPerShareDiluted")
+
+    err = excinfo.value
+    assert err.code == Code.SOURCE_HTTP
+    assert err.details["reason"] == "invalid identifier"
+    assert calls == []

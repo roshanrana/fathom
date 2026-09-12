@@ -126,13 +126,21 @@ def _finite_or_none(value: float | None) -> float | None:
 def _fetch_concept(
     sec: SecClient, cik: str, taxonomy: str, concept: str
 ) -> dict[str, object] | None:
-    """Fetch one company-concept payload; `None` when the concept is missing (SOURCE_HTTP)."""
+    """Fetch one company-concept payload; `None` when the concept is missing.
+
+    T-023 attempt 4: whole-body guard, same rationale as the Yahoo/Stooq/`_numeric_val` parse
+    helpers — any failure from `sec.company_concept()` (a `FathomError`, e.g. malformed body or
+    invalid identifier, or anything else) is treated as "this concept is unusable", never
+    propagated, so `snapshot()` never raises for data reasons. `snapshot()`'s own cik validation
+    (`SOURCE_HTTP` "invalid identifier") remains the one intentional raise, before any request.
+    """
     try:
-        return sec.company_concept(cik, taxonomy, concept)
-    except FathomError as exc:
-        if exc.code == Code.SOURCE_HTTP:
+        payload = sec.company_concept(cik, taxonomy, concept)
+        if not isinstance(payload, dict):
             return None
-        raise
+        return payload
+    except Exception:  # noqa: BLE001 - whole-body parse guard, see docstring above
+        return None
 
 
 def _entries(payload: dict[str, object] | None) -> list[dict[str, object]]:
