@@ -12,7 +12,8 @@ prototype, one pitch slide, live-demo readiness. Due 2026-09-12.
 - Done (PASS): T-000 (v2), T-001, T-002, T-003, T-004, T-005, T-006 (closed after T-014), T-007, T-008, T-009, T-010, T-012, T-013 (v2), T-014. Security reviews CLEAR or closed.
 - M4 (owner request 2026-09-12: "work with data from live but free sources"): spec `docs/design/05-m4-live-data.md`, D-013; G1–G4 re-entry ledgered (seq 33). Packs: T-018 PASS (security → T-022 CLEAR), T-019 PASS (security → T-023), T-020 PASS v3 + CLEAR, T-021 PASS (network smoke NFLX/COST ≈ 2 s), T-022 PASS + CLEAR, T-023 PASS v3 — final security HIGH (concept payload type) in attempt 4 with one combined final review.
 - Real live check (Orchestrator): `fathom fetch NFLX` → 5 EDGAR filings, all canonical sections, Yahoo bars to 2026-09-11, XBRL snapshot; `fathom brief NFLX` 12/12 verified.
-- Next: T-023 v4 review → G6.4 → G7/G8 addenda → evidence export → tag v0.2.0. Owner: set `FATHOM_SEC_CONTACT` to use live mode; Stooq intermittently serves a bot-challenge page (Yahoo is primary).
+- T-023 closed after four rounds (seq 39); its final-round HIGH (unguarded JSON decodes in sec.py) became T-024: attempt 1 FAIL (nested KeyError + a false gate figure in the handoff), attempt 2 under combined final review.
+- Next: T-024 v2 review → G6.4 → G7/G8 addenda → evidence export → tag v0.2.0. Owner: set `FATHOM_SEC_CONTACT` to use live mode; Stooq intermittently serves a bot-challenge page (Yahoo is primary).
 - Shipped v0.1.0 before M4: tag `v0.1.0`, all 18 packs PASS (T-000 … T-017), gates G0–G8 in the ledger (31 entries, chain valid), evidence pack exported under `docs/evidence/pack-2026-09-12/`, CI green on `main`.
 - Deliverables for the challenge: prototype (Streamlit `fathom app`, CLI, API, MCP), one slide `docs/pitch/fathom-pitch.pptx`, demo checklist `docs/ops/demo-checklist.md`.
 - Owner decisions pending: (1) make `roshanrana/fathom` public (currently private); (2) run the `portfolio-publish` skill (profile README, LinkedIn, resume) — approval gate first; (3) on interview day, set `PORTKEY_API_KEY` and run `fathom probe`; live verified share is read from the audit log.
@@ -39,6 +40,9 @@ prototype, one pitch slide, live-demo readiness. Due 2026-09-12.
 | 2026-09-12 | G7 | Resilience check found unmapped transport errors → D-010, T-015 (two attempts: null completion value found by the Verifier) | decisions.md D-010 |
 | 2026-09-12 | T-011 | Three attempts because gate figures moved after each later code task; the last finding (volatile PNG sizes) was removed by an Orchestrator edit that makes the sentence size-independent — a doc edit, not code; recorded here rather than a fourth dispatch | this file |
 | 2026-09-12 | T-017 | Pack validated as `complexity: normal` (validator requires T1 for `template`; owner routing pins T2) | pack |
+| 2026-09-12 | M4 | Orchestrator ran real network checks (NFLX, COST, BRK.B, API live) as G7 evidence with the owner's SEC contact in the shell only; the contact was redacted from one handoff before commit | this file |
+| 2026-09-12 | T-023 | Four attempts: each fresh Security Reviewer probed deeper into payload parsing; spec amended to a whole-body guard + fullmatch + fuzz (D-014); two-strike rule waived because verification PASSED each time and only the security probe widened | decisions.md D-014 |
+| 2026-09-12 | T-024 | Implementer's attempt-1 handoff claimed a green gate that was red (1 failed); caught by the Verifier; attempt 2 required a verbatim gate line | T-024.verdict.md |
 
 ## Task log
 <!-- one line per event: ts task outcome attempt tier in≈tokens calls commit -->
@@ -91,7 +95,14 @@ prototype, one pitch slide, live-demo readiness. Due 2026-09-12.
 | T-014 | T2 | 40000 | ~30000 (0.75×) | 20 | 1 | PASS |
 | T-015 | T2 | 40000 | ~60000 (1.50×, two attempts) | 45 | 2 | PASS |
 | T-016 | T2 | 40000 | ~45000 (1.13×) | 35 | 1 | PASS |
-| Verifiers (15 runs) | T2 | ~30000 each | ~110000 each (subagent total incl. tool output) | 20–36 | — | — |
+| T-018 | T2 | 80000 | ~90000 (1.13×) | 60 | 1 | PASS |
+| T-019 | T2 | 80000 | ~70000 (0.88×) | 50 | 1 | PASS |
+| T-020 | T2 | 80000 | ~150000 (1.9×, three attempts) | 120 | 3 | PASS |
+| T-021 | T2 | 40000 | ~60000 (1.5×) | 48 | 1 | PASS |
+| T-022 | T2 | 40000 | ~35000 (0.88×) | 30 | 1 | PASS |
+| T-023 | T2 | 40000 | ~130000 (3.3×, four attempts) | 110 | 4 | PASS |
+| T-024 | T2 | 20000 | ~40000 (2×, two attempts) | 35 | 2 | verify |
+| Verifiers (30+ runs) | T2 | ~30000 each | ~110000–140000 each (subagent total incl. tool output) | 20–36 | — | — |
 
 ## Gate log
 | Gate | Date | Approver | Evidence seq |
