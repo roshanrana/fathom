@@ -1,5 +1,5 @@
 # STATE — Fathom
-Phase: 6 (re-entered for M4 after v0.1.0 ship)   Milestone: M4 — live data   Wave: W7   Updated: 2026-09-12T18:10:00Z
+Phase: 8 — shipped v0.2.0 (M4 live data) 2026-09-12   Milestone: M4 (closed)   Wave: —   Updated: 2026-09-12T22:30:00Z
 
 **Gate command:** `uv run python scripts/check.py` (exists from T-000 onward).
 **Routing:** T3 (this session) designs and orchestrates only; all implementation, verification
@@ -12,8 +12,9 @@ prototype, one pitch slide, live-demo readiness. Due 2026-09-12.
 - Done (PASS): T-000 (v2), T-001, T-002, T-003, T-004, T-005, T-006 (closed after T-014), T-007, T-008, T-009, T-010, T-012, T-013 (v2), T-014. Security reviews CLEAR or closed.
 - M4 (owner request 2026-09-12: "work with data from live but free sources"): spec `docs/design/05-m4-live-data.md`, D-013; G1–G4 re-entry ledgered (seq 33). Packs: T-018 PASS (security → T-022 CLEAR), T-019 PASS (security → T-023), T-020 PASS v3 + CLEAR, T-021 PASS (network smoke NFLX/COST ≈ 2 s), T-022 PASS + CLEAR, T-023 PASS v3 — final security HIGH (concept payload type) in attempt 4 with one combined final review.
 - Real live check (Orchestrator): `fathom fetch NFLX` → 5 EDGAR filings, all canonical sections, Yahoo bars to 2026-09-11, XBRL snapshot; `fathom brief NFLX` 12/12 verified.
-- T-023 closed after four rounds (seq 39); its final-round HIGH (unguarded JSON decodes in sec.py) became T-024: attempt 1 FAIL (nested KeyError + a false gate figure in the handoff), attempt 2 under combined final review.
-- Next: T-024 v2 review → G6.4 → G7/G8 addenda → evidence export → tag v0.2.0. Owner: set `FATHOM_SEC_CONTACT` to use live mode; Stooq intermittently serves a bot-challenge page (Yahoo is primary).
+- T-023 closed after four rounds (seq 39); T-024 closed on attempt 3 with typed payload accessors and structural fuzz (CLEAR). G6.4, G7-M4, G8-M4 ledgered; evidence pack re-exported; tag `v0.2.0`.
+- Live mode usage: `FATHOM_DATA_SOURCE=live FATHOM_SEC_CONTACT=<email> uv run fathom fetch TICKER` then any surface with `--source live` / `?source=live` / page radio. Owner must set the SEC contact; Stooq intermittently serves a bot-challenge page (Yahoo is primary).
+- Backlog additions (LOW): fixture-mode `UNKNOWN_TICKER` message no longer lists the universe when a data_dir is given; `_stooq` row loop outside the guard; DPS "present but no frames" = absent; `quotes.py` manifest non-dict; live page screenshot not captured (screenshots.py has no live switch).
 - Shipped v0.1.0 before M4: tag `v0.1.0`, all 18 packs PASS (T-000 … T-017), gates G0–G8 in the ledger (31 entries, chain valid), evidence pack exported under `docs/evidence/pack-2026-09-12/`, CI green on `main`.
 - Deliverables for the challenge: prototype (Streamlit `fathom app`, CLI, API, MCP), one slide `docs/pitch/fathom-pitch.pptx`, demo checklist `docs/ops/demo-checklist.md`.
 - Owner decisions pending: (1) make `roshanrana/fathom` public (currently private); (2) run the `portfolio-publish` skill (profile README, LinkedIn, resume) — approval gate first; (3) on interview day, set `PORTKEY_API_KEY` and run `fathom probe`; live verified share is read from the audit log.
@@ -101,7 +102,7 @@ prototype, one pitch slide, live-demo readiness. Due 2026-09-12.
 | T-021 | T2 | 40000 | ~60000 (1.5×) | 48 | 1 | PASS |
 | T-022 | T2 | 40000 | ~35000 (0.88×) | 30 | 1 | PASS |
 | T-023 | T2 | 40000 | ~130000 (3.3×, four attempts) | 110 | 4 | PASS |
-| T-024 | T2 | 20000 | ~40000 (2×, two attempts) | 35 | 2 | verify |
+| T-024 | T2 | 20000 | ~75000 (3.8×, three attempts) | 60 | 3 | PASS |
 | Verifiers (30+ runs) | T2 | ~30000 each | ~110000–140000 each (subagent total incl. tool output) | 20–36 | — | — |
 
 ## Gate log
@@ -120,6 +121,10 @@ prototype, one pitch slide, live-demo readiness. Due 2026-09-12.
 | G6.3 | 2026-09-12 | ci | 30 |
 | G7 | 2026-09-12 | delivery_lead (D-000) | 31 |
 | G8 | 2026-09-12 | release_manager (D-000) | 32 |
+| G1–G4 (M4 re-entry) | 2026-09-12 | delivery_lead (D-000) | 33 |
+| G6.4 | 2026-09-12 | ci | 41 |
+| G7-M4 | 2026-09-12 | delivery_lead (D-000) | 42 |
+| G8-M4 | 2026-09-12 | release_manager (D-000) | 43 |
 
 ## Routing overrides
 <!-- deviations from config/model-routing.yaml, with reason -->
