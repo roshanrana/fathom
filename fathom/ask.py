@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -31,6 +32,35 @@ logger = logging.getLogger("fathom")
 _REPAIR_MESSAGE_MAX_CHARS = 300
 _JSON_FENCE_PREFIX = "```json"
 _JSON_FENCE_SUFFIX = "```"
+_INPUT_VALUE_SEGMENT = re.compile(r"input_value=.*?(?=, input_type=)", re.S)
+_CLAIM_TEXT_CAP = 600
+_CLAIM_TEXT_TRUNCATED_LEN = 599
+_CLAIM_QUOTE_CAP = 2000
+_ELLIPSIS = "…"
+
+
+def _repair_error_text(exc: Exception) -> str:
+    """Build the `"repair"` error string from `exc`'s class/location only (T-006 F2).
+
+    `str(ValidationError)` can embed a (possibly truncated) `repr()` of the offending
+    `input_value`, echoing the model's own prior output back into the retry prompt. Strip any
+    `input_value=...` segment before truncating, so the repair message never carries it.
+    """
+    sanitized = _INPUT_VALUE_SEGMENT.sub("input_value=<removed>", str(exc))
+    return f"{type(exc).__name__}: {sanitized[:_REPAIR_MESSAGE_MAX_CHARS]}"
+
+
+def _truncate_claim_fields(text: str, quote: str) -> tuple[str, str]:
+    """Cap `text`/`quote` to the `Claim` contract's bounds so conversion never raises (D-007).
+
+    `text` over 600 characters is cut to 599 plus an ellipsis; `quote` over 2 000 characters is
+    cut to 2 000 (which then fails `verify_claim`'s word-count check on its own).
+    """
+    if len(text) > _CLAIM_TEXT_CAP:
+        text = text[:_CLAIM_TEXT_TRUNCATED_LEN] + _ELLIPSIS
+    if len(quote) > _CLAIM_QUOTE_CAP:
+        quote = quote[:_CLAIM_QUOTE_CAP]
+    return text, quote
 
 
 def _sha256(text: str) -> str:
@@ -152,13 +182,14 @@ def _claims_from_draft(
 ) -> list[Claim]:
     claims: list[Claim] = []
     for draft_claim in draft_claims:
+        text, quote = _truncate_claim_fields(draft_claim.text, draft_claim.quote)
         section_text = section_text_by_key.get((draft_claim.accession, draft_claim.section_id))
-        verified = section_text is not None and guard.verify_claim(draft_claim.quote, section_text)
+        verified = section_text is not None and guard.verify_claim(quote, section_text)
         claims.append(
             Claim(
-                text=draft_claim.text,
+                text=text,
                 source=Source(accession=draft_claim.accession, section_id=draft_claim.section_id),
-                quote=draft_claim.quote,
+                quote=quote,
                 verified=verified,
                 guarded=False,
             )
@@ -196,7 +227,7 @@ def _complete_answer_draft(
             draft, user_json, result.text, result.input_tokens, result.output_tokens
         )
     except (json.JSONDecodeError, ValidationError) as exc:
-        repair_payload = {**user_payload, "repair": str(exc)[:_REPAIR_MESSAGE_MAX_CHARS]}
+        repair_payload = {**user_payload, "repair": _repair_error_text(exc)}
         repair_user_json = json.dumps(repair_payload)
         repair_result = active_provider.complete_json(SYSTEM_ASK, repair_user_json, max_tokens)
         try:

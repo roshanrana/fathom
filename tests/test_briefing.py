@@ -273,6 +273,91 @@ def test_fr018_injected_advice_claim_is_guarded_and_briefing_still_validates(
     assert briefing.guard_hits == 1
 
 
+# --- T-014 D-007: draft-to-claim conversion never raises ----------------------------------
+
+
+def test_fr006_to_claim_truncates_overlong_text_without_raising(
+    data_dir: Path, tmp_path: Path
+) -> None:
+    """AC1: a 5 000-char claim text is truncated to 600 chars ending with an ellipsis."""
+    context = build_context("AAPL", data_dir)
+    accession = context.excerpts[0].accession
+    section_id = context.excerpts[0].section_id
+
+    draft = _empty_draft()
+    draft["business_snapshot"] = [
+        {
+            "text": "A" * 5000,
+            "accession": accession,
+            "section_id": section_id,
+            "quote": "placeholder quote text only used to satisfy schema validation",
+        }
+    ]
+
+    provider = ScriptedProvider([json.dumps(draft)])
+    settings = _settings(data_dir, tmp_path)
+
+    briefing = brief("AAPL", settings, provider=provider)
+
+    claim = briefing.business_snapshot[0]
+    assert len(claim.text) == 600
+    assert claim.text.endswith("…")
+
+
+def test_fr006_to_claim_truncates_overlong_quote_and_fails_verification(
+    data_dir: Path, tmp_path: Path
+) -> None:
+    """AC2: a 10 000-char quote is truncated to 2 000 chars and fails verification, no raise."""
+    context = build_context("AAPL", data_dir)
+    accession = context.excerpts[0].accession
+    section_id = context.excerpts[0].section_id
+
+    draft = _empty_draft()
+    draft["business_snapshot"] = [
+        {
+            "text": "Claim text for the overlong-quote test.",
+            "accession": accession,
+            "section_id": section_id,
+            "quote": "word " * 2000,
+        }
+    ]
+
+    provider = ScriptedProvider([json.dumps(draft)])
+    settings = _settings(data_dir, tmp_path)
+
+    briefing = brief("AAPL", settings, provider=provider)
+
+    claim = briefing.business_snapshot[0]
+    assert len(claim.quote) == 2000
+    assert claim.verified is False
+
+
+def test_fr006_repair_message_never_echoes_invalid_draft_marker(
+    data_dir: Path, tmp_path: Path
+) -> None:
+    """AC5 (T-006 F2): a marker embedded in an invalid field never reaches the repair prompt."""
+    marker = "ZZMARKERZZ"
+    invalid_draft = json.dumps(
+        {
+            "business_snapshot": f"{marker} not a list",
+            "latest_results": [],
+            "risks": [],
+            "liquidity_capital": [],
+            "notable_disclosures": [],
+            "talking_points": [],
+        }
+    )
+    provider = ScriptedProvider([invalid_draft, invalid_draft])
+    settings = _settings(data_dir, tmp_path)
+
+    with pytest.raises(FathomError) as exc_info:
+        brief("AAPL", settings, provider=provider)
+
+    assert exc_info.value.code == Code.CONTRACT_INVALID
+    assert len(provider.calls) == 2
+    assert marker not in provider.calls[1][1]
+
+
 # --- AC5/AC6: offline end-to-end over the whole universe -----------------------------------
 
 # Known fixture/parser gap in fathom/filings.py (frozen, out of T-006's scope: see "## Blocked"

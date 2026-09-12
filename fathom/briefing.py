@@ -33,9 +33,14 @@ logger = logging.getLogger("fathom")
 
 _CODE_FENCE = re.compile(r"^```(?:json)?\s*(.*?)\s*```$", re.S)
 _SENTENCE_END = re.compile(r"[.!?](?=\s|$)")
+_INPUT_VALUE_SEGMENT = re.compile(r"input_value=.*?(?=, input_type=)", re.S)
 _REPAIR_ERROR_MAX = 300
 _FULL_TEXT_CAP = 8000
 _MAX_REPAIR_ATTEMPTS = 2
+_CLAIM_TEXT_CAP = 600
+_CLAIM_TEXT_TRUNCATED_LEN = 599
+_CLAIM_QUOTE_CAP = 2000
+_ELLIPSIS = "…"
 
 _DRAFT_FIELDS: tuple[str, ...] = (
     "business_snapshot",
@@ -185,6 +190,17 @@ def _parse_draft(raw_text: str) -> BriefingDraft:
     return BriefingDraft.model_validate(payload)
 
 
+def _repair_error_text(exc: Exception) -> str:
+    """Build the `"repair"` error string from `exc`'s class/location only (T-006 F2).
+
+    `str(ValidationError)` can embed a (possibly truncated) `repr()` of the offending
+    `input_value`, echoing the model's own prior output back into the retry prompt. Strip any
+    `input_value=...` segment before truncating, so the repair message never carries it.
+    """
+    sanitized = _INPUT_VALUE_SEGMENT.sub("input_value=<removed>", str(exc))
+    return f"{type(exc).__name__}: {sanitized[:_REPAIR_ERROR_MAX]}"
+
+
 def _obtain_draft(
     provider: Provider, user_text: str, max_tokens: int
 ) -> tuple[ProviderResult, BriefingDraft, str]:
@@ -197,7 +213,7 @@ def _obtain_draft(
     try:
         return result, _parse_draft(result.text), user_text
     except (json.JSONDecodeError, ValidationError) as exc:
-        error_text = str(exc)[:_REPAIR_ERROR_MAX]
+        error_text = _repair_error_text(exc)
 
     repair_payload = json.loads(user_text)
     repair_payload["repair"] = error_text
@@ -214,14 +230,28 @@ def _obtain_draft(
         ) from exc
 
 
+def _truncate_claim_fields(text: str, quote: str) -> tuple[str, str]:
+    """Cap `text`/`quote` to the `Claim` contract's bounds so conversion never raises (D-007).
+
+    `text` over 600 characters is cut to 599 plus an ellipsis; `quote` over 2 000 characters is
+    cut to 2 000 (which then fails `verify_claim`'s word-count check on its own).
+    """
+    if len(text) > _CLAIM_TEXT_CAP:
+        text = text[:_CLAIM_TEXT_TRUNCATED_LEN] + _ELLIPSIS
+    if len(quote) > _CLAIM_QUOTE_CAP:
+        quote = quote[:_CLAIM_QUOTE_CAP]
+    return text, quote
+
+
 def _to_claim(draft_claim: DraftClaim, lookup: dict[tuple[str, str], str]) -> Claim:
     """Turn one `DraftClaim` into a `Claim`, verifying its quote against the cited excerpt."""
+    text, quote = _truncate_claim_fields(draft_claim.text, draft_claim.quote)
     section_text = lookup.get((draft_claim.accession, draft_claim.section_id))
-    verified = section_text is not None and verify_claim(draft_claim.quote, section_text)
+    verified = section_text is not None and verify_claim(quote, section_text)
     return Claim(
-        text=draft_claim.text,
+        text=text,
         source=Source(accession=draft_claim.accession, section_id=draft_claim.section_id),
-        quote=draft_claim.quote,
+        quote=quote,
         verified=verified,
     )
 

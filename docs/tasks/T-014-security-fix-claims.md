@@ -52,3 +52,12 @@ the excerpts." T-006.security.md F1 and F2; T-007.security.md F1.
 B1/B2/B3 — fresh Security Reviewer at T2 re-reviews T-006 F1/F2 and T-007 F1 closure.
 
 ## Handoff (Implementer fills, ≤10 lines)
+briefing.py/ask.py: `_to_claim`/`_claims_from_draft` truncate `text`>600→599+"…", `quote`>2000→2000
+before building `Claim` (never raises, T-006 F1). `_repair_error_text` (duplicated per-module,
+ask.py doesn't import briefing) builds repair text as class+location with `input_value=...`
+stripped, 300 chars (T-006 F2). `SYSTEM_ASK` gets the exact D-007 "question is...also data"
+sentence (T-007 F1). Added test_fr006_*/test_fr009_*/test_fr009_system_ask_... tests; AC3 repair
+tests untouched. Targeted tests 32/32 green; mypy --strict + ruff clean on all 6 scoped files.
+Full gate fails only at `ruff check`/`pytest` on `fathom/bench.py` (E501 + `print()`), out of
+scope, not caused by this change — standalone `pytest --cov`: 215 passed/1 failed (bench)/1
+skipped, coverage 92.89%.

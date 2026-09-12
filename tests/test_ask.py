@@ -241,6 +241,80 @@ def test_fr009_ask_raises_contract_invalid_after_two_bad_responses(
     assert len(scripted.calls) == 2
 
 
+def test_fr009_ask_truncates_overlong_claim_text_without_raising(
+    tmp_path: Path, data_dir: Path
+) -> None:
+    """AC1 (T-014/D-007): a 5 000-char claim text is truncated to 600 chars, no raise."""
+    accession = _aapl_10k_accession(data_dir)
+    draft_json = json.dumps(
+        {
+            "claims": [
+                {
+                    "text": "A" * 5000,
+                    "accession": accession,
+                    "section_id": "10-K:1A",
+                    "quote": "placeholder quote text only used to satisfy schema validation",
+                }
+            ],
+            "not_found": False,
+        }
+    )
+    scripted = ScriptedProvider([draft_json])
+    settings = _settings(tmp_path, data_dir=data_dir)
+
+    answer = ask("AAPL", "What are the risk factors?", settings, provider=scripted, k=6)
+
+    assert len(answer.claims) == 1
+    assert len(answer.claims[0].text) == 600
+    assert answer.claims[0].text.endswith("…")
+
+
+def test_fr009_ask_truncates_overlong_claim_quote_and_fails_verification(
+    tmp_path: Path, data_dir: Path
+) -> None:
+    """AC2 (T-014/D-007): a 10 000-char quote is truncated to 2 000 chars, verified is False."""
+    accession = _aapl_10k_accession(data_dir)
+    draft_json = json.dumps(
+        {
+            "claims": [
+                {
+                    "text": "Claim text for the overlong-quote test.",
+                    "accession": accession,
+                    "section_id": "10-K:1A",
+                    "quote": "word " * 2000,
+                }
+            ],
+            "not_found": False,
+        }
+    )
+    scripted = ScriptedProvider([draft_json])
+    settings = _settings(tmp_path, data_dir=data_dir)
+
+    answer = ask("AAPL", "What are the risk factors?", settings, provider=scripted, k=6)
+
+    assert len(answer.claims) == 1
+    assert len(answer.claims[0].quote) == 2000
+    assert answer.claims[0].verified is False
+
+
+def test_fr009_ask_repair_message_never_echoes_invalid_draft_marker(
+    tmp_path: Path, data_dir: Path
+) -> None:
+    """AC5 (T-006 F2, carried into ask's mirrored repair path): a marker embedded in an
+    invalid field never reaches the repair prompt."""
+    marker = "ZZMARKERZZ"
+    invalid_draft = json.dumps({"claims": f"{marker} not a list", "not_found": False})
+    scripted = ScriptedProvider([invalid_draft, invalid_draft])
+    settings = _settings(tmp_path, data_dir=data_dir)
+
+    with pytest.raises(FathomError) as exc_info:
+        ask("AAPL", "What are the risk factors?", settings, provider=scripted, k=6)
+
+    assert exc_info.value.code == Code.CONTRACT_INVALID
+    assert len(scripted.calls) == 2
+    assert marker not in scripted.calls[1][1]
+
+
 def test_fr009_ask_never_logs_or_audits_question_text(
     tmp_path: Path, data_dir: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
