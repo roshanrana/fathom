@@ -9,7 +9,7 @@ reasoning: on
 budget: {input_tokens: 80000, tool_calls: 80, wall_clock_min: 120}
 depends_on: [T-018]
 rtm: [FR-022, FR-023]
-status: todo
+status: done
 ---
 # T-019 — Live prices (Yahoo → Stooq) and XBRL valuation snapshot
 

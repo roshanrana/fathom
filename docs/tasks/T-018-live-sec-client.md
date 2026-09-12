@@ -9,7 +9,7 @@ reasoning: on
 budget: {input_tokens: 80000, tool_calls: 80, wall_clock_min: 120}
 depends_on: [T-017]
 rtm: [FR-021, FR-025, NFR-013]
-status: todo
+status: done
 ---
 # T-018 — Live foundation: settings, errors, HTTP cache/throttle, SEC EDGAR client
 

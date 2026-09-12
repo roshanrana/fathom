@@ -9,7 +9,7 @@ reasoning: off
 budget: {input_tokens: 40000, tool_calls: 40, wall_clock_min: 45}
 depends_on: [T-018, T-019]
 rtm: [FR-021, FR-025]
-status: todo
+status: done
 ---
 # T-022 — Live security fix: EDGAR field validation, streamed size cap, reason sanitisation
 

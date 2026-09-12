@@ -9,7 +9,7 @@ reasoning: on
 budget: {input_tokens: 80000, tool_calls: 80, wall_clock_min: 120}
 depends_on: [T-018, T-019]
 rtm: [FR-020, FR-024, NFR-012]
-status: todo
+status: done
 ---
 # T-020 — Live materialization, data_dir_for, surface wiring, fetch command
 

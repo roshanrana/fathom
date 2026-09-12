@@ -9,7 +9,7 @@ reasoning: off
 budget: {input_tokens: 40000, tool_calls: 40, wall_clock_min: 45}
 depends_on: [T-020]
 rtm: [FR-020, NFR-012, NFR-013, FR-017]
-status: todo
+status: done
 ---
 # T-021 — Live mode: network smoke test, docs, demo checklist
 

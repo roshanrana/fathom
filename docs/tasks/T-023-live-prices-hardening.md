@@ -9,7 +9,7 @@ reasoning: off
 budget: {input_tokens: 40000, tool_calls: 40, wall_clock_min: 45}
 depends_on: [T-019]
 rtm: [FR-022, FR-023]
-status: todo
+status: done
 ---
 # T-023 — Live prices/facts hardening
 

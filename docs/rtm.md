@@ -1,6 +1,6 @@
 # Requirements Traceability Matrix
 
-Regenerated 2026-09-12T16:43Z by `scripts/evidence.py rtm`.
+Regenerated 2026-09-12T21:16Z by `scripts/evidence.py rtm`.
 
 | Req | Design § | Tasks | Tests | Evidence seq | Status |
 |---|---|---|---|---|---|
@@ -20,7 +20,7 @@ Regenerated 2026-09-12T16:43Z by `scripts/evidence.py rtm`.
 | FR-014 | — | T-009(done) | tests\test_api.py | — | covered |
 | FR-015 | 02-hld.md: Critical flows | T-010(done), T-013(done), T-016(done) | tests\test_bench.py | — | covered |
 | FR-016 | 02-hld.md: Critical flows | T-000(done) | — | — | NO TEST (G7 blocker) |
-| FR-017 | — | T-011(done) | — | — | NO TEST (G7 blocker) |
+| FR-017 | — | T-011(done), T-021(done) | — | — | NO TEST (G7 blocker) |
 | FR-018 | 02-threat-model.md: AI-risk section (controls-evidence §8); 02-threat-model.md: STRIDE table | T-006(done), T-013(done), T-014(done) | tests\test_briefing.py | — | covered |
 | FR-019 | — | T-012(done) | tests\test_mcp.py | — | covered |
 | NFR-001 | 02-hld.md: NFR design | T-010(done) | tests\test_bench.py | — | covered |
