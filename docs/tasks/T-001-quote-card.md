@@ -69,3 +69,10 @@ Numeric anchors for tests are in `data/SOURCES.md` §Anchors (AAPL and JPM).
 none
 
 ## Handoff (Implementer fills, ≤10 lines)
+Implemented: `fathom/quotes.py` (`PricePoint`, `QuoteCard`, `quote_card`) per LLD §2.4; all definitions (as_of, prev_close, change_pct, week52 window, ytd/one_year/thirty_day pct, NaN→None snapshot fields, copy-before-sort) verified against `data/SOURCES.md` anchors via a throwaway script before writing tests.
+Files changed: fathom/quotes.py (new), tests/test_quotes.py (new).
+Tests run: `uv run pytest tests/test_quotes.py -q` → 9 passed. `uv run ruff check` on both files → clean. `uv run mypy fathom` → success, no issues (7 source files).
+Deviations from pack: none.
+Open questions: none.
+Full gate (`uv run python scripts/check.py`) fails only on pre-existing `fathom/filings.py` (ruff F401/UP037) and `fathom/providers.py` (ruff format) — both outside this task's scope (other in-progress tasks' files); not touched.
+Budget actual: ~55k input tokens read across turns, ~14 tool calls, single attempt, well under 45 min.
