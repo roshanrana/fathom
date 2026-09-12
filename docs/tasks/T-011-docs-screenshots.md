@@ -64,3 +64,20 @@ metrics card (embed `metrics/card.md`), data sources + licences, design docs ind
 none
 
 ## Handoff (Implementer fills, ≤10 lines)
+
+Wrote README.md, docs/OVERVIEW.md, docs/SHOWCASE.md, docs/ASSUMPTIONS.md, scripts/screenshots.py
+(rewritten: self-starts the streamlit subprocess, offline provider, temp audit path, grows the
+viewport per capture, kills the subprocess in `finally`), and 5 PNGs in docs/assets/ (00-full-page
+142 KB, 01-header-quote 45 KB, 02-chart-filings 76 KB, 03-briefing 468 KB, 04-ask 68 KB — all
+≤600 KB). docs/mcp.md and pyproject.toml untouched (T-012 already merged; `screenshots` extra
+already present). Commands run and quoted verbatim: `uv sync --all-extras`;
+`uv run python scripts/check.py` (238 passed, 95.18% coverage, all checks passed — run twice,
+identical each time); `uv run fathom brief AAPL` / `--json`; `uv run fathom quote AAPL`;
+`uv run fathom filings AAPL`; `uv run fathom probe`; `uv run fathom --help`;
+`uv run python scripts/screenshots.py`; `uv run ruff check/format --check scripts/screenshots.py`;
+`uv run mypy scripts/screenshots.py` (all clean, script not added to the ruff/mypy exclude list);
+a `fastapi.testclient.TestClient` call against `fathom.api.create_app()` for `/healthz` and
+`POST /api/ask/AAPL` (embedded in SHOWCASE, noted as TestClient-captured, byte-identical to the
+equivalent `curl`). Every figure quoted (test count, coverage, KPI table, AAPL quote/JSON values)
+came from one of these runs or from `metrics/card.md` / `data/SOURCES.md` verbatim — none invented.
+Not verified or approved by me; over to the Verifier.
