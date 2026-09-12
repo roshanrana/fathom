@@ -13,3 +13,5 @@ graphify-out/cache/
 .worktrees/
 .streamlit/secrets.toml
 .env
+.cache/
+metrics/timing.json
