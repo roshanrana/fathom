@@ -36,6 +36,7 @@ EXCLUDED_SUFFIXES = {
     ".ico",
     ".pdf",
     ".docx",
+    ".pptx",
     ".zip",
     ".lock",
     ".parquet",
