@@ -30,6 +30,14 @@ with `math.isfinite` and every derived ratio is `None` unless finite; (5) sanity
 in (0, 1e12], equity magnitude ≤ 1e13, |EPS| ≤ 1e4, DPS in [0, 1e3] — out-of-range facts are
 treated as missing.
 
+## Attempt-3 amendment (Orchestrator diagnosis after two security rounds)
+Rule (1) is replaced: the Yahoo and Stooq parse helpers contain no I/O and no control flow
+that should propagate, so each wraps its whole body in `except Exception` and converts any
+failure into a source failure ("malformed response"); enumerating exception classes is what
+produced the AttributeError and OverflowError escapes. Additionally, Yahoo timestamps are
+accepted only in the range [0, 4102444800] (year 2100) before conversion; other values drop the
+row. The same "whole-body guard" applies to the fact-parsing helpers in `facts.py`.
+
 ## Scope (files this task may touch)
 - fathom/live/prices.py, fathom/live/facts.py
 - tests/test_live_prices.py, tests/test_live_facts.py
