@@ -61,22 +61,20 @@ _10Q_KEY_TO_ID: dict[tuple[str, str], str] = {
     ("II", "1A"): "10-Q:II.1A",
 }
 
-# Step 7 (D-006): heading-vocabulary fallback. Title keys per canonical id (LLD §2.5 step 7);
-# 10-Q ids reuse the same keys as the 10-K id with the matching title.
+# Step 7 (D-006, tightened by D-009): heading-vocabulary fallback. 10-K only (LLD §2.5 step 7).
+# Title keys per canonical id; the promiscuous bare "business" key is removed per D-009.
 _FALLBACK_MIN_BODY = 400
+_FALLBACK_TRIGGER_COUNT = 4
+_FALLBACK_MAX_BODY = 120_000
+_FALLBACK_LINE_MAX_LEN = 100
 _TITLE_KEYS: dict[str, tuple[str, ...]] = {
-    "10-K:1": ("description of the business", "business summary", "business"),
+    "10-K:1": ("description of the business", "business summary"),
     "10-K:1A": ("risk factors",),
     "10-K:1C": ("cybersecurity",),
     "10-K:3": ("legal proceedings",),
     "10-K:7": ("management's discussion and analysis", "management’s discussion and analysis"),
     "10-K:7A": ("quantitative and qualitative disclosures",),
     "10-K:9A": ("controls and procedures",),
-    "10-Q:I.2": ("management's discussion and analysis", "management’s discussion and analysis"),
-    "10-Q:I.3": ("quantitative and qualitative disclosures",),
-    "10-Q:I.4": ("controls and procedures",),
-    "10-Q:II.1": ("legal proceedings",),
-    "10-Q:II.1A": ("risk factors",),
 }
 
 
@@ -137,18 +135,64 @@ def _part_lookup(part_matches: list[re.Match[str]]) -> Callable[[int], str]:
     return lookup
 
 
+_FALLBACK_STOP_LINE_MIN_LEN = 10
+
+# D-009's "generic all-caps stop line" examples ("SIGNATURES", "EXHIBIT INDEX", "CONSOLIDATED
+# STATEMENT OF INCOME", "NOTES TO CONSOLIDATED FINANCIAL STATEMENTS") are all *standard,
+# recurring EDGAR filing-structure markers* -- generic in the sense of being common across the
+# whole 10-K corpus, not company-specific. "PROPERTIES" (a mis-tagged Item 2 in cross-reference
+# filings like MCD's) is the same kind of marker. A bare "any all-caps line" reading also catches
+# company-specific bolded Risk Factors category dividers (e.g. MCD's "STRATEGY AND BRAND",
+# "OPERATIONS") and PDF-extraction word-wrap fragments (e.g. "MANAGEM", "SINESS" from a mangled
+# "MANAGEMENT'S VIEW OF THE BUSINESS" sub-heading) -- both of which are genuine *body* content
+# and must not truncate a candidate. Evidence: without this vocabulary anchor, MCD's real,
+# `10-K:1A` prose gets cut to 1,636 chars (fails AC1's >=2000) and stray word-wrap fragments cut
+# `10-K:7` to 2 chars; with it, `10-K:3`/`10-K:7` still stop cleanly before the auditor's report
+# and financial statements (AC2b) while `10-K:1`/`1A`/`7` reach genuine, correctly-bounded prose.
+_STOP_LINE_MARKERS: tuple[str, ...] = (
+    "SIGNATURE",
+    "EXHIBIT",
+    "PROPERT",
+    "CONSOLIDATED STATEMENT",
+    "CONSOLIDATED BALANCE",
+    "NOTES TO",
+    "REPORT OF INDEPENDENT",
+    "POWER OF ATTORNEY",
+    "SCHEDULE",
+)
+
+
+def _is_stop_line(stripped: str) -> bool:
+    """A generic all-caps stop line (D-009): <=100 chars, >=3 letters, no period, all upper,
+    and matching one of the standard EDGAR filing-structure markers in `_STOP_LINE_MARKERS`.
+    """
+    if not stripped or len(stripped) > _FALLBACK_LINE_MAX_LEN:
+        return False
+    if len(stripped) < _FALLBACK_STOP_LINE_MIN_LEN:
+        return False
+    if "." in stripped:
+        return False
+    if sum(1 for ch in stripped if ch.isalpha()) < 3:
+        return False
+    if stripped != stripped.upper():
+        return False
+    return any(marker in stripped for marker in _STOP_LINE_MARKERS)
+
+
 def _heading_vocabulary_matches(normalised: str) -> list[tuple[int, int, str]]:
     """(line_start, line_end, section_id) for every line starting with a `_TITLE_KEYS` phrase.
 
-    `line_end` is the character offset immediately after the line's content (before its
-    newline), matching how `HEADER` bodies are bounded.
+    A heading line (D-009): stripped content <= 100 chars, does not end with a period, and
+    starts case-insensitively with one of the id's title keys. `line_end` is the character
+    offset immediately after the line's content (before its newline), matching how `HEADER`
+    bodies are bounded.
     """
     matches: list[tuple[int, int, str]] = []
     pos = 0
     for raw_line in normalised.splitlines(keepends=True):
         content = raw_line.rstrip("\r\n")
         stripped = content.strip()
-        if stripped and len(stripped) <= 120:
+        if stripped and len(stripped) <= _FALLBACK_LINE_MAX_LEN and not stripped.endswith("."):
             low = stripped.lower()
             for section_id, keys in _TITLE_KEYS.items():
                 if any(low.startswith(key) for key in keys):
@@ -158,21 +202,46 @@ def _heading_vocabulary_matches(normalised: str) -> list[tuple[int, int, str]]:
     return matches
 
 
+def _stop_line_starts(normalised: str) -> list[int]:
+    """Start offsets of every generic all-caps stop line (D-009 end boundary)."""
+    starts: list[int] = []
+    pos = 0
+    for raw_line in normalised.splitlines(keepends=True):
+        content = raw_line.rstrip("\r\n")
+        stripped = content.strip()
+        if _is_stop_line(stripped):
+            starts.append(pos)
+        pos += len(raw_line)
+    return starts
+
+
 def _fallback_candidate(
     section_id: str,
     heading_matches: list[tuple[int, int, str]],
     item_header_starts: list[int],
+    stop_line_starts: list[int],
     text_length: int,
 ) -> tuple[int, int] | None:
-    """The longest (char_start, char_end) candidate body for `section_id`, or None."""
-    boundary_starts = sorted({start for start, _, _ in heading_matches})
+    """The longest (char_start, char_end) candidate body for `section_id`, or None.
+
+    The end boundary (D-009) is the earliest of: the next heading line matching any key of a
+    *different* id; the next Item header; the next generic all-caps stop line; or end of text --
+    all strictly after this heading line's own end, so the heading line itself never counts as
+    its own stop line. A later occurrence of the *same* id's heading (e.g. a running header
+    repeating the current section's own title, or a sub-heading restating it) does not end the
+    candidate on its own -- crossing into a genuinely different canonical section does.
+    """
+    other_id_starts = sorted(
+        {other_start for other_start, _, matched in heading_matches if matched != section_id}
+    )
     best_candidate: tuple[int, int] | None = None
-    for start, end, matched_id in heading_matches:
+    for _start, end, matched_id in heading_matches:
         if matched_id != section_id:
             continue
-        next_boundaries = [b for b in boundary_starts if b > start]
-        next_headers = [h for h in item_header_starts if h > start]
-        candidate_end = min([text_length, *next_boundaries, *next_headers])
+        next_boundaries = [b for b in other_id_starts if b > end]
+        next_headers = [h for h in item_header_starts if h > end]
+        next_stops = [s for s in stop_line_starts if s > end]
+        candidate_end = min([text_length, *next_boundaries, *next_headers, *next_stops])
         candidate_len = candidate_end - end
         best_len = best_candidate[1] - best_candidate[0] if best_candidate is not None else -1
         if candidate_len > best_len:
@@ -180,18 +249,25 @@ def _fallback_candidate(
     return best_candidate
 
 
-def _apply_heading_fallback(normalised: str, sections: list[Section]) -> list[Section]:
-    """Step 7 (D-006): widen any canonical section whose step-4 body is < 400 chars.
+def _apply_heading_fallback(normalised: str, sections: list[Section], form: str) -> list[Section]:
+    """Step 7 (D-006, tightened by D-009): widen short canonical 10-K bodies.
 
-    Leaves `sections` untouched (byte-identical) unless at least one section is short and a
-    longer heading-vocabulary candidate is found for it.
+    10-K only. Filing-level trigger: runs only when at least 4 canonical 10-K ids have a
+    step-4 body under 400 chars (the cross-reference-sheet signature); a single legitimately
+    short body (e.g. "Item 3. Legal Proceedings -- None.") must not trigger it. Leaves
+    `sections` untouched (byte-identical) otherwise, and per-section only widens when a longer
+    candidate is found that is also at most 120,000 characters.
     """
+    if form != "10-K":
+        return sections
+
     short_ids = {s.section_id for s in sections if len(s.text) < _FALLBACK_MIN_BODY}
-    if not short_ids:
+    if len(short_ids) < _FALLBACK_TRIGGER_COUNT:
         return sections
 
     heading_matches = _heading_vocabulary_matches(normalised)
     item_header_starts = [m.start() for m in HEADER.finditer(normalised)]
+    stop_line_starts = _stop_line_starts(normalised)
     text_length = len(normalised)
 
     widened: dict[str, Section] = {}
@@ -199,12 +275,13 @@ def _apply_heading_fallback(normalised: str, sections: list[Section]) -> list[Se
         if section.section_id not in short_ids:
             continue
         candidate = _fallback_candidate(
-            section.section_id, heading_matches, item_header_starts, text_length
+            section.section_id, heading_matches, item_header_starts, stop_line_starts, text_length
         )
         if candidate is None:
             continue
         char_start, char_end = candidate
-        if (char_end - char_start) > len(section.text):
+        candidate_len = char_end - char_start
+        if candidate_len > len(section.text) and candidate_len <= _FALLBACK_MAX_BODY:
             widened[section.section_id] = section.model_copy(
                 update={
                     "text": normalised[char_start:char_end],
@@ -264,7 +341,7 @@ def parse_sections(text: str, form: str) -> list[Section]:
             {"form": form},
         )
 
-    sections = _apply_heading_fallback(normalised, sections)
+    sections = _apply_heading_fallback(normalised, sections, form)
     sections.sort(key=lambda section: section.char_start)
     return sections
 

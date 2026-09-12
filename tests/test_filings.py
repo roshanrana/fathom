@@ -30,6 +30,20 @@ AC4_ALLOWLIST: dict[str, str] = {}
 # (LLD §2.5 step 7) must recover real section bodies for it.
 _MCD_10K_ACCESSION = "0000063908-26-000035"
 
+# D-009 (T-013 attempt 2): the fallback's trigger is now filing-level (>= 4 canonical 10-K ids
+# with a step-4 body < 400 chars), not per-section. Across all 20 10-K fixtures, MCD (7 short
+# ids) and JPM (exactly 4: 10-K:1C, 10-K:3, 10-K:7, 10-K:7A) are the only two whose trigger
+# fires. Of JPM's 4 candidates, only 10-K:1C finds a genuinely longer, clean, capped-compliant
+# body (verified by inspection: single heading match, clean Cybersecurity prose, ends on a
+# natural closing sentence about Board oversight -- matching the attempt-1 verdict's own
+# assessment of this specific section); 10-K:3/7/7A stay at their step-4 length because no
+# candidate for them is both longer than the original and within the 120,000-char cap. This is
+# a deliberate, verified deviation from the pack's "exactly one accession differs" wording (see
+# the attempt-2 handoff); the real, checked invariant is the LLD's own: every filing that does
+# not meet the >= 4-short-id trigger is byte-identical, and any body that does change is both
+# longer than its step-4 length and within the cap.
+_JPM_10K_ACCESSION = "0001628280-26-008131"
+
 _MANIFEST_PATH = Path(__file__).resolve().parent / "fixtures" / "sections_manifest.json"
 
 
@@ -207,34 +221,29 @@ def test_fr005_heading_fallback_recovers_mcd_cross_reference_sheet_10k(data_dir:
         assert section.text == normalised[section.char_start : section.char_end]
 
 
-def test_fr005_heading_fallback_regression_manifest_unchanged_for_stable_fixtures(
+def test_fr005_heading_fallback_regression_manifest_two_accessions_differ(
     data_dir: Path,
 ) -> None:
-    """AC2: fixtures whose step-4 bodies were all >= 400 chars stay byte-identical.
+    """AC2 (D-009): the manifest matches every fixture except MCD and JPM's FY2025 10-Ks.
 
-    `tests/fixtures/sections_manifest.json` was generated once from the pre-T-013 parser
-    (commit a268fba, `fathom/filings.py` before the step-7 fallback landed): accession ->
-    {section_id: sha256(text)}. MCD's 10-K is expected to change (AC1). Deviation (recorded in
-    the T-013 handoff): 9 other large 10-Ks (AMZN, BAC, CAT, CVX, GS, JNJ, JPM, TSLA, XOM) also
-    have at least one canonical section with a step-4 body < 400 chars (a genuinely brief
-    "not applicable"/cross-reference item, not a parse failure), so the step-7 fallback widens
-    those specific sections too -- this is the LLD's literal step-7 trigger ("any canonical id
-    whose chosen body is shorter than 400 characters"), not specific to MCD. This test therefore
-    checks the LLD's actual invariant: byte-identical only for fixtures whose *every* step-4
-    body was already >= 400 chars.
+    `tests/fixtures/sections_manifest.json` was generated from the parser as committed at
+    T-010 (commit e76d081, before the step-7 fallback existed): accession -> {section_id:
+    sha256(text)}. Under the D-009-tightened, filing-level trigger (>= 4 canonical 10-K ids
+    with a step-4 body < 400 chars), MCD (7 short ids) and JPM (exactly 4) are the only two
+    fixtures whose trigger fires -- the other 9 large 10-Ks that changed under attempt 1's
+    per-section trigger (AMZN, BAC, CAT, CVX, GS, JNJ, TSLA, and JPM's other 3 short ids) each
+    have < 4 short ids and are therefore byte-identical again. Exactly 2 accessions differ; every
+    other accession (95 of 97) is byte-identical. Any body that does change must be both longer
+    than its step-4 body and within the 120,000-char cap.
     """
     manifest: dict[str, dict[str, str]] = json.loads(_MANIFEST_PATH.read_text(encoding="utf-8"))
     frame = pd.read_parquet(data_dir / "filings.parquet")
 
+    changed_accessions: set[str] = set()
     checked = 0
     for _, row in frame.iterrows():
         accession = str(row["accession"])
-        if accession == _MCD_10K_ACCESSION:
-            continue
         expected = manifest.get(accession, {})
-        # Reconstruct whether every step-4 body for this accession was already >= 400 chars by
-        # checking the *current* fallback-aware parse: a fixture the fallback touched will have
-        # at least one hash mismatch below; skip only fixtures where nothing changed.
         try:
             sections = sections_for(accession, data_dir)
         except FathomError:
@@ -243,8 +252,7 @@ def test_fr005_heading_fallback_regression_manifest_unchanged_for_stable_fixture
         if got == expected:
             checked += 1
             continue
-        # A changed fixture must be one where the fallback genuinely found a *longer* body for
-        # at least one short (< 400 char) canonical section -- never a shrink or unrelated drift.
+        changed_accessions.add(accession)
         for section in sections:
             old_hash = expected.get(section.section_id)
             if (
@@ -252,12 +260,114 @@ def test_fr005_heading_fallback_regression_manifest_unchanged_for_stable_fixture
                 or old_hash == hashlib.sha256(section.text.encode("utf-8")).hexdigest()
             ):
                 continue
-            assert len(section.text) >= 400, (
-                f"{accession} {section.section_id} changed without meeting the >= 400 char "
-                "fallback bar"
+            assert 400 <= len(section.text) <= 120_000, (
+                f"{accession} {section.section_id} changed to {len(section.text)} chars, "
+                "outside the [400, 120000] fallback band"
             )
 
-    assert checked >= 87, f"expected at least 87 byte-identical fixtures, got {checked}"
+    assert changed_accessions == {_MCD_10K_ACCESSION, _JPM_10K_ACCESSION}, changed_accessions
+    assert checked == 95, f"expected 95 byte-identical fixtures, got {checked}"
+
+
+def test_fr005_heading_fallback_mcd_content_checks(data_dir: Path) -> None:
+    """AC2b: MCD's fallback-widened bodies are capped and free of adjacent-section leakage.
+
+    `10-K:3` (Legal Proceedings) must stop before the auditor's report/signature block;
+    `10-K:7` (MD&A) must stop before the financial statements; `10-K:1` (Business) must open
+    with descriptive prose, not a page-number cross-reference line.
+    """
+    sections = sections_for(_MCD_10K_ACCESSION, data_dir)
+    by_id = {s.section_id: s for s in sections}
+
+    print("MCD canonical sections (accession", _MCD_10K_ACCESSION, "):")
+    for section_id in (
+        "10-K:1",
+        "10-K:1A",
+        "10-K:1C",
+        "10-K:3",
+        "10-K:7",
+        "10-K:7A",
+        "10-K:9A",
+    ):
+        section = by_id.get(section_id)
+        if section is None:
+            print(f"  {section_id}: MISSING")
+            continue
+        print(f"  {section_id}: len={len(section.text)} first120={section.text[:120]!r}")
+
+    legal = by_id["10-K:3"]
+    assert len(legal.text) <= 20_000, f"10-K:3 too long: {len(legal.text)}"
+    assert "SIGNATURES" not in legal.text
+    assert "Report of Independent Registered Public Accounting Firm" not in legal.text
+
+    mdna = by_id["10-K:7"]
+    assert len(mdna.text) <= 120_000, f"10-K:7 too long: {len(mdna.text)}"
+    assert "CONSOLIDATED STATEMENT OF INCOME" not in mdna.text
+
+    business = by_id["10-K:1"]
+    assert "Page" not in business.text[:200], business.text[:200]
+
+
+def test_fr005_heading_fallback_jpm_1c_is_the_only_genuine_extra_change(data_dir: Path) -> None:
+    """AC2 evidence: JPM's trigger fires (4 short ids), but only 10-K:1C validly widens.
+
+    JPM's other 3 short candidates (10-K:3, 10-K:7, 10-K:7A) are all legitimate short
+    cross-references ("Refer to Note 30...", "Refer to the Market Risk Management section...")
+    and stay untouched: either no longer candidate exists, or the longest one found does not
+    clear the cap/length gate.
+    """
+    manifest: dict[str, dict[str, str]] = json.loads(_MANIFEST_PATH.read_text(encoding="utf-8"))
+    expected = manifest[_JPM_10K_ACCESSION]
+    sections = sections_for(_JPM_10K_ACCESSION, data_dir)
+    by_id = {s.section_id: s for s in sections}
+
+    changed = [
+        sid
+        for sid, section in by_id.items()
+        if hashlib.sha256(section.text.encode("utf-8")).hexdigest() != expected.get(sid)
+    ]
+    assert changed == ["10-K:1C"], changed
+    assert len(by_id["10-K:1C"].text) >= 2000
+    for sid in ("10-K:3", "10-K:7", "10-K:7A"):
+        assert len(by_id[sid].text) < 400, f"{sid} unexpectedly widened"
+
+
+def test_fr005_heading_fallback_10q_only_10k_never_touched(data_dir: Path) -> None:
+    """AC2c: the fallback never fires for 10-Q, even inside a synthetic cross-reference filing.
+
+    A legitimately short "Item 1. Legal Proceedings -- None." 10-Q body is left byte-identical
+    by construction (10-K only), which also removes the attempt-1 10-Q/10-K title-key
+    collision (finding 3): `_TITLE_KEYS` no longer carries any 10-Q entries at all.
+    """
+    text = (
+        "PART I\n"
+        "Item 2. Management Discussion\n"
+        "Real MD&A content goes here, quite long, describing results of operations "
+        "in detail across several sentences of substantive analysis and commentary.\n"
+        "Item 4. Controls and Procedures\n"
+        "Controls content here describing disclosure controls and procedures "
+        "effectiveness across the reporting period in reasonable depth.\n"
+        "PART II\n"
+        "Item 1. Legal Proceedings\n"
+        "None.\n"
+        "Item 1A. Risk Factors\n"
+        "None.\n"
+    )
+    sections = parse_sections(text, "10-Q")
+    by_id = {s.section_id: s for s in sections}
+
+    legal = by_id["10-Q:II.1"]
+    assert legal.text == "Item 1. Legal Proceedings\nNone.\n"
+    assert len(legal.text) < 400
+
+    frame = pd.read_parquet(data_dir / "filings.parquet")
+    real_10q_accessions = [
+        str(row["accession"]) for _, row in frame.iterrows() if str(row["form"]) == "10-Q"
+    ]
+    for accession in real_10q_accessions:
+        sections_10q = sections_for(accession, data_dir)
+        for section in sections_10q:
+            assert section.section_id.startswith("10-Q:")
 
 
 def test_fr005_section_is_a_pydantic_model() -> None:

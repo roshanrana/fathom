@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-12T15:06:31.719423+00:00",
+  "generated_at": "2026-09-12T15:48:55.099816+00:00",
   "kpis": [
     {
       "key": "parser_coverage",
@@ -47,7 +47,7 @@
       "status": "pass",
       "target": 5000,
       "unit": "ms",
-      "value": 36
+      "value": 33
     },
     {
       "key": "injection_passed",
