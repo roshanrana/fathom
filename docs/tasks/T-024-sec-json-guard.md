@@ -56,3 +56,10 @@ older-page) and a seeded 200-iter mutation fuzz (seed 20240024) in `test_live_se
 `grep json.loads fathom/live` shows only the one guarded call. Targeted: 42 passed. Full gate:
 456 passed (2 network tests skipped offline), 95.62% coverage, all clean. Updated
 `docs/SHOWCASE.md` figure 440->456; README.md has no gate-figure string.
+
+Attempt 2: Added `_valid_table_rows` (equal-length-list + per-row str-type guard) for
+`filings.recent`/older pages, and a validated `ticker_map` (skip non-dict/wrong-type entries,
+raise malformed response if zero remain); wrapped `_to_filing` field access in try/except.
+Seeded fuzz (seed 20240024) now passes. Full gate final line: `456 passed, 2 skipped, 2
+warnings in 44.35s` / `all checks passed` (95.34% coverage) — pasted verbatim into
+`docs/SHOWCASE.md` §1.

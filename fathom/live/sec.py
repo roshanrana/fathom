@@ -105,6 +105,20 @@ def _validate_concept_identifier(value: str) -> None:
         raise _invalid_concept_identifier_error()
 
 
+def _malformed_response_error(source: str) -> FathomError:
+    """Build the SOURCE_HTTP "malformed response" error (never echoes body/URL text).
+
+    Shared by `_decode_json` (whole-body decode guard) and every per-entry structure guard
+    below (`ticker_map`, `filings`, `_to_filing`) so a structurally corrupted-but-valid-JSON
+    payload fails the same way as an undecodable one (T-024 attempt-1 finding).
+    """
+    return FathomError(
+        Code.SOURCE_HTTP,
+        f"{source} response could not be parsed",
+        {"source": source, "status": 200, "reason": "malformed response"},
+    )
+
+
 def _decode_json(body: bytes, source: str) -> dict[str, object]:
     """Decode a JSON-object body from `source` (05-m4-live-data.md §4 SOURCE_HTTP guard, frozen).
 
@@ -114,18 +128,52 @@ def _decode_json(body: bytes, source: str) -> dict[str, object]:
     is rejected the same way, so a corrupted or unexpected body never reaches a caller as a bare
     `UnicodeDecodeError`/`JSONDecodeError` (T-023 attempt-4/attempt-5 findings). Raises
     `SOURCE_HTTP` reason "malformed response" with no body/URL text in message or details.
+
+    Note: this only guarantees the *top-level* body parsed as JSON and is a `dict` — it says
+    nothing about the shape of entries nested inside (per-ticker or per-filing rows). Callers
+    that index into nested entries must validate those separately (see `ticker_map`, `filings`,
+    `_to_filing`; T-024 attempt-1 finding).
     """
     try:
         payload = json.loads(body)
         if not isinstance(payload, dict):
             raise TypeError(f"{source} payload is not a JSON object")
     except Exception as exc:  # noqa: BLE001 - whole-body parse guard, see docstring
-        raise FathomError(
-            Code.SOURCE_HTTP,
-            f"{source} response could not be parsed",
-            {"source": source, "status": 200, "reason": "malformed response"},
-        ) from exc
+        raise _malformed_response_error(source) from exc
     return cast(dict[str, object], payload)
+
+
+_RECENT_TABLE_KEYS = ("form", "filingDate", "reportDate", "accessionNumber", "primaryDocument")
+
+
+def _valid_table_rows(table: object) -> list[dict[str, object]]:
+    """Validate and reconstruct rows from an EDGAR parallel-array table (T-024 attempt-1 fix).
+
+    `table` (e.g. `filings.recent`, or an older-filings page) must be a `dict` of equal-length
+    lists covering every key in `_RECENT_TABLE_KEYS`. Any structural problem — not a dict,
+    a missing/non-list key, or unequal-length lists — yields zero rows rather than raising;
+    callers treat zero rows as "nothing qualifies" (SOURCE_EMPTY further up the call chain),
+    never a crash. A row is included only if every expected key holds a `str` value at that
+    index; rows with a non-string value (a mutated int/null/list in place of a form/accession/
+    document/date string) are silently skipped rather than indexed unguarded.
+    """
+    if not isinstance(table, dict):
+        return []
+    lists: dict[str, list[object]] = {}
+    for key in _RECENT_TABLE_KEYS:
+        value = table.get(key)
+        if not isinstance(value, list):
+            return []
+        lists[key] = value
+    length = len(lists[_RECENT_TABLE_KEYS[0]])
+    if any(len(values) != length for values in lists.values()):
+        return []
+    rows: list[dict[str, object]] = []
+    for i in range(length):
+        row = {key: lists[key][i] for key in _RECENT_TABLE_KEYS}
+        if all(isinstance(value, str) for value in row.values()):
+            rows.append(row)
+    return rows
 
 
 def _document_url(cik: str, accession: str, primary_document: str) -> str:
@@ -176,12 +224,6 @@ def html_to_text(html_content: str) -> str:
     return collapsed.strip()
 
 
-def _entries_from_table(table: dict[str, list[object]]) -> list[dict[str, object]]:
-    keys = list(table.keys())
-    length = len(table[keys[0]]) if keys else 0
-    return [{key: table[key][i] for key in keys} for i in range(length)]
-
-
 class SecClient:
     """SEC EDGAR access: ticker resolution, filings listing, document text."""
 
@@ -205,10 +247,33 @@ class SecClient:
         return cls(http=live_http, contact=settings.sec_contact)
 
     def ticker_map(self) -> dict[str, dict[str, object]]:
-        """The SEC ticker -> CIK map, keyed by upper-cased ticker (e.g. "BRK-B")."""
+        """The SEC ticker -> CIK map, keyed by upper-cased ticker (e.g. "BRK-B").
+
+        Each raw entry is validated before being indexed (T-024 attempt-1 fix): only entries
+        that are `dict`s with a string `ticker`, a string `title`, and an `int` `cik_str` are
+        kept; anything else (a mutated key/value that still parses as JSON) is silently
+        skipped. If validation leaves zero entries, the whole response is treated as malformed
+        (`SOURCE_HTTP` reason "malformed response") rather than returning an empty map.
+        """
         body = self._http.get(_TICKER_MAP_URL, ttl_hours=_TICKER_MAP_TTL_HOURS, source="sec")
-        raw = cast(dict[str, dict[str, object]], _decode_json(body, "sec"))
-        return {str(entry["ticker"]).upper(): entry for entry in raw.values()}
+        raw = _decode_json(body, "sec")
+        result: dict[str, dict[str, object]] = {}
+        for entry in raw.values():
+            if not isinstance(entry, dict):
+                continue
+            ticker = entry.get("ticker")
+            title = entry.get("title")
+            cik_str = entry.get("cik_str")
+            if (
+                isinstance(ticker, str)
+                and isinstance(title, str)
+                and isinstance(cik_str, int)
+                and not isinstance(cik_str, bool)
+            ):
+                result[ticker.upper()] = entry
+        if not result:
+            raise _malformed_response_error("sec")
+        return result
 
     def lookup(self, ticker: str) -> SecCompany:
         """Resolve a ticker to its `SecCompany`; normalises "." <-> "-" (e.g. BRK.B/BRK-B)."""
@@ -242,22 +307,25 @@ class SecClient:
     def filings(self, cik: str) -> list[SecFiling]:
         """The latest 10-K plus up to four 10-Qs filed within 730 days, newest first."""
         submissions = self._submissions(cik)
-        filings_block = cast(dict[str, object], submissions.get("filings", {}))
-        recent = cast(dict[str, list[object]], filings_block.get("recent", {}))
-        entries = _entries_from_table(recent)
+        filings_raw = submissions.get("filings")
+        filings_block = filings_raw if isinstance(filings_raw, dict) else {}
+        entries = _valid_table_rows(filings_block.get("recent"))
 
         candidates = [entry for entry in entries if entry.get("form") in _QUALIFYING_FORMS]
 
         if len(candidates) < _MIN_QUALIFYING_BEFORE_OLDER_PAGES:
-            for page in cast(list[dict[str, object]], filings_block.get("files", [])):
+            files_raw = filings_block.get("files")
+            for page in files_raw if isinstance(files_raw, list) else []:
+                if not isinstance(page, dict):
+                    continue
                 name = str(page.get("name", ""))
                 if not name:
                     continue
                 _validate_safe_name(name)
                 page_url = _SUBMISSIONS_PAGE_URL.format(name=name)
                 body = self._http.get(page_url, ttl_hours=_SUBMISSIONS_TTL_HOURS, source="sec")
-                page_table = cast(dict[str, list[object]], _decode_json(body, "sec"))
-                page_entries = _entries_from_table(page_table)
+                page_table = _decode_json(body, "sec")
+                page_entries = _valid_table_rows(page_table)
                 candidates.extend(
                     entry for entry in page_entries if entry.get("form") in _QUALIFYING_FORMS
                 )
@@ -318,9 +386,15 @@ class SecClient:
         return _decode_json(body, "sec")
 
     def _to_filing(self, cik: str, entry: dict[str, object]) -> SecFiling:
-        form = cast(Literal["10-K", "10-Q"], entry["form"])
-        accession = str(entry["accessionNumber"])
-        primary_document = str(entry["primaryDocument"])
+        try:
+            form = cast(Literal["10-K", "10-Q"], entry["form"])
+            accession = str(entry["accessionNumber"])
+            primary_document = str(entry["primaryDocument"])
+        except (KeyError, TypeError) as exc:
+            # Defense in depth: `entry` should already be a `_valid_table_rows` row (all of
+            # form/accessionNumber/primaryDocument present as `str`), but never index an
+            # untrusted-derived entry without a guard (T-024 attempt-1 finding).
+            raise _malformed_response_error("sec") from exc
         _validate_accession(accession)
         _validate_safe_name(primary_document)
         filing_date = _parse_date(str(entry.get("filingDate", "")))

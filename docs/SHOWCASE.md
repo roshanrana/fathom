@@ -11,7 +11,7 @@ is quoted or summarised underneath it — nothing here is typed in from memory.
 uv run python scripts/check.py
 ```
 > Ran ruff lint/format, mypy strict (host and `--platform linux`), pytest, the secrets scan,
-> `fathom bench`, bench drift and card drift: **456 passed (2 network tests skipped offline), 95.62% coverage, all checks passed.**
+> `fathom bench`, bench drift and card drift: **456 passed, 2 skipped, 2 warnings in 44.35s, 95.34% coverage, all checks passed.**
 
 ## 2. The page: header, quote, chart, filings
 
