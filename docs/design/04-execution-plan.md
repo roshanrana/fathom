@@ -33,6 +33,7 @@ graphify scaffold (`.graphifyignore`, `graphify-out/GRAPH_REPORT.md`, `.claude/s
 | T-011 | M3 | Documentation and screenshots | low | T2 | high | 80000/80/120 | T-008, T-009, T-010 | FR-017 |
 | T-012 | M3 | MCP server (Could) | low | T2 | normal | 40000/40/45 | T-006, T-007 | FR-019 |
 | T-013 | M3 | Polish — parser heading fallback, guard inflections, metrics regen (D-006) | medium | T2 | high | 80000/80/120 | T-006, T-007, T-010 | FR-005, FR-008, FR-015, FR-018, NFR-007, NFR-008 |
+| T-014 | M2 | Security fix — claim conversion never raises; question is data (D-007) | medium | T2 | normal | 40000/40/45 | T-006, T-007 | FR-006, FR-009, FR-018 |
 
 FR-016 (fetch script) is delivered by the Orchestrator's foundation step and verified by T-001's
 fixture-schema tests. FR-017's pitch slide is produced by the Orchestrator at Phase 8.
