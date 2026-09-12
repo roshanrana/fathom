@@ -89,7 +89,13 @@ def _claim_state(claim: Claim) -> str:
 
 
 def _claim_line(claim: Claim, filings_by_accession: dict[str, Filing]) -> str:
-    """One line of the readable rendering: `- text [state] (form date section)`."""
+    """One line of the readable rendering: `- text [state] (form date section)`.
+
+    A claim with no source accession (e.g. the input-guard notice) renders `(no source)`
+    instead of the `? ? ?` triple.
+    """
+    if not claim.source.accession:
+        return f"- {claim.text} [{_claim_state(claim)}] (no source)"
     filing = filings_by_accession.get(claim.source.accession)
     form = filing.form if filing is not None else "?"
     filing_date = filing.filing_date.isoformat() if filing is not None else "?"

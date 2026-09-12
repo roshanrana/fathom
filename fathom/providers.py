@@ -56,6 +56,65 @@ class OfflineProvider:
         )
 
 
+def _timeout_error(name: str) -> FathomError:
+    return FathomError(
+        Code.PROVIDER_TIMEOUT,
+        f"{name} provider request failed (reason=timeout)",
+        {"provider": name},
+    )
+
+
+def _transport_error(name: str, exc: httpx.HTTPError) -> FathomError:
+    reason = type(exc).__name__
+    return FathomError(
+        Code.PROVIDER_HTTP,
+        f"{name} provider request failed (reason={reason})",
+        {"status": 0, "provider": name, "reason": reason},
+    )
+
+
+def _http_status_error(name: str, status: int) -> FathomError:
+    return FathomError(
+        Code.PROVIDER_HTTP,
+        f"{name} provider returned HTTP {status}",
+        {"status": status, "provider": name},
+    )
+
+
+def _malformed_response_error(name: str, status: int) -> FathomError:
+    return FathomError(
+        Code.PROVIDER_HTTP,
+        f"{name} provider request failed (reason=malformed response)",
+        {"status": status, "provider": name, "reason": "malformed response"},
+    )
+
+
+def _parse_portkey_payload(
+    name: str, response: httpx.Response
+) -> tuple[str, dict[str, Any] | None]:
+    """Decode the 2xx body and pull out the completion text; never leaks the body."""
+    try:
+        payload = response.json()
+        text = payload["choices"][0]["message"]["content"]
+    except (json.JSONDecodeError, KeyError, IndexError, TypeError) as exc:
+        raise _malformed_response_error(name, response.status_code) from exc
+    usage = payload.get("usage")
+    return text, usage
+
+
+def _parse_anthropic_payload(
+    name: str, response: httpx.Response
+) -> tuple[str, dict[str, Any] | None]:
+    """Decode the 2xx body and pull out the completion text; never leaks the body."""
+    try:
+        payload = response.json()
+        text = payload["content"][0]["text"]
+    except (json.JSONDecodeError, KeyError, IndexError, TypeError) as exc:
+        raise _malformed_response_error(name, response.status_code) from exc
+    usage = payload.get("usage")
+    return text, usage
+
+
 class PortkeyProvider:
     """OpenAI-compatible chat completions via the Portkey gateway."""
 
@@ -91,19 +150,13 @@ class PortkeyProvider:
         try:
             response = self._client.post(url, json=body, headers=headers, timeout=self._timeout_s)
         except httpx.TimeoutException as exc:
-            raise FathomError(
-                Code.PROVIDER_TIMEOUT, "portkey request timed out", {"provider": self.name}
-            ) from exc
+            raise _timeout_error(self.name) from exc
+        except httpx.HTTPError as exc:
+            raise _transport_error(self.name, exc) from exc
         latency_ms = int((time.monotonic() - start) * 1000)
         if not (200 <= response.status_code < 300):
-            raise FathomError(
-                Code.PROVIDER_HTTP,
-                f"portkey returned status {response.status_code}",
-                {"status": response.status_code, "provider": self.name},
-            )
-        payload = response.json()
-        text = payload["choices"][0]["message"]["content"]
-        usage = payload.get("usage")
+            raise _http_status_error(self.name, response.status_code)
+        text, usage = _parse_portkey_payload(self.name, response)
         input_tokens = usage.get("prompt_tokens") if usage else None
         output_tokens = usage.get("completion_tokens") if usage else None
         return ProviderResult(
@@ -149,19 +202,13 @@ class AnthropicProvider:
                 ANTHROPIC_URL, json=body, headers=headers, timeout=self._timeout_s
             )
         except httpx.TimeoutException as exc:
-            raise FathomError(
-                Code.PROVIDER_TIMEOUT, "anthropic request timed out", {"provider": self.name}
-            ) from exc
+            raise _timeout_error(self.name) from exc
+        except httpx.HTTPError as exc:
+            raise _transport_error(self.name, exc) from exc
         latency_ms = int((time.monotonic() - start) * 1000)
         if not (200 <= response.status_code < 300):
-            raise FathomError(
-                Code.PROVIDER_HTTP,
-                f"anthropic returned status {response.status_code}",
-                {"status": response.status_code, "provider": self.name},
-            )
-        payload = response.json()
-        text = payload["content"][0]["text"]
-        usage = payload.get("usage")
+            raise _http_status_error(self.name, response.status_code)
+        text, usage = _parse_anthropic_payload(self.name, response)
         input_tokens = usage.get("input_tokens") if usage else None
         output_tokens = usage.get("output_tokens") if usage else None
         return ProviderResult(

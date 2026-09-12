@@ -55,3 +55,16 @@ of the form/date/section triple.
 B2 (gateway egress; malformed/spoofed responses) — fresh Security Reviewer at T2 confirms closure of T-004 F1.
 
 ## Handoff (Implementer fills, ≤10 lines)
+Implemented in fathom/providers.py: shared `_timeout_error`/`_transport_error`/`_http_status_error`/
+`_malformed_response_error` builders plus one parse helper per provider
+(`_parse_portkey_payload`, `_parse_anthropic_payload`) catching
+`json.JSONDecodeError`/`KeyError`/`IndexError`/`TypeError` around the 2xx body decode+index, never
+including the body. `complete_json` now catches `httpx.TimeoutException` before the general
+`httpx.HTTPError`. Messages: "<name> provider request failed (reason=<reason>)" (timeout/transport/
+malformed) and "<name> provider returned HTTP <status>" (non-2xx). CLI: `_claim_line` in
+fathom/cli.py prints `(no source)` when `claim.source.accession` is empty (covers `fathom ask`'s
+input-guard claim). Added tests test_nfr002_* (providers: ConnectError/RemoteProtocolError/timeout
+x2 providers, malformed-body parametrized x2 providers; cli: monkeypatched-transport ConnectError
+exit-2 case) and test_fr013_* (no-source text + unchanged JSON rendering) in
+tests/test_providers.py / tests/test_cli.py. Full gate green (257 tests, mypy strict both
+platforms, ruff, no secrets, bench/card drift clean). Not touched: no new deps; scope respected.

@@ -158,6 +158,175 @@ def test_nfr005_anthropic_read_timeout_raises_provider_timeout() -> None:
     assert excinfo.value.code == Code.PROVIDER_TIMEOUT
 
 
+# --- T-015 AC1 (D-010): non-timeout httpx.HTTPError -> PROVIDER_HTTP w/ reason; no leak ----------
+
+
+def test_nfr002_portkey_connect_error_raises_provider_http_with_reason() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    settings = Settings(llm_provider="portkey", portkey_api_key=SECRET_PORTKEY_KEY)
+    provider = make_provider(settings, client=client)
+
+    with pytest.raises(FathomError) as excinfo:
+        provider.complete_json("s", "u", 100)
+
+    error = excinfo.value
+    assert error.code == Code.PROVIDER_HTTP
+    assert error.details == {"status": 0, "provider": "portkey", "reason": "ConnectError"}
+    assert error.message == "portkey provider request failed (reason=ConnectError)"
+    assert SECRET_PORTKEY_KEY not in error.message
+    assert SECRET_PORTKEY_KEY not in json.dumps(error.details)
+    assert settings.portkey_base_url not in error.message
+
+
+def test_nfr002_portkey_remote_protocol_error_raises_provider_http_with_reason() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.RemoteProtocolError("bad protocol frame", request=request)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    settings = Settings(llm_provider="portkey", portkey_api_key=SECRET_PORTKEY_KEY)
+    provider = make_provider(settings, client=client)
+
+    with pytest.raises(FathomError) as excinfo:
+        provider.complete_json("s", "u", 100)
+
+    error = excinfo.value
+    assert error.code == Code.PROVIDER_HTTP
+    assert error.details == {"status": 0, "provider": "portkey", "reason": "RemoteProtocolError"}
+    assert error.message == "portkey provider request failed (reason=RemoteProtocolError)"
+    assert SECRET_PORTKEY_KEY not in error.message
+
+
+def test_nfr002_portkey_read_timeout_raises_provider_timeout_with_frozen_message() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("timed out", request=request)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    settings = Settings(llm_provider="portkey", portkey_api_key=SECRET_PORTKEY_KEY)
+    provider = make_provider(settings, client=client)
+
+    with pytest.raises(FathomError) as excinfo:
+        provider.complete_json("s", "u", 100)
+
+    error = excinfo.value
+    assert error.code == Code.PROVIDER_TIMEOUT
+    assert error.details == {"provider": "portkey"}
+    assert error.message == "portkey provider request failed (reason=timeout)"
+    assert SECRET_PORTKEY_KEY not in error.message
+
+
+def test_nfr002_anthropic_connect_error_raises_provider_http_with_reason() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    settings = Settings(llm_provider="anthropic", anthropic_api_key=SECRET_ANTHROPIC_KEY)
+    provider = make_provider(settings, client=client)
+
+    with pytest.raises(FathomError) as excinfo:
+        provider.complete_json("s", "u", 100)
+
+    error = excinfo.value
+    assert error.code == Code.PROVIDER_HTTP
+    assert error.details == {"status": 0, "provider": "anthropic", "reason": "ConnectError"}
+    assert error.message == "anthropic provider request failed (reason=ConnectError)"
+    assert SECRET_ANTHROPIC_KEY not in error.message
+    assert SECRET_ANTHROPIC_KEY not in json.dumps(error.details)
+
+
+def test_nfr002_anthropic_remote_protocol_error_raises_provider_http_with_reason() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.RemoteProtocolError("bad protocol frame", request=request)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    settings = Settings(llm_provider="anthropic", anthropic_api_key=SECRET_ANTHROPIC_KEY)
+    provider = make_provider(settings, client=client)
+
+    with pytest.raises(FathomError) as excinfo:
+        provider.complete_json("s", "u", 100)
+
+    error = excinfo.value
+    assert error.code == Code.PROVIDER_HTTP
+    assert error.details == {"status": 0, "provider": "anthropic", "reason": "RemoteProtocolError"}
+    assert error.message == "anthropic provider request failed (reason=RemoteProtocolError)"
+    assert SECRET_ANTHROPIC_KEY not in error.message
+
+
+# --- T-015 AC2 (D-010): malformed 2xx body -> PROVIDER_HTTP "malformed response"; body never leaks
+
+
+_PORTKEY_MALFORMED_BODIES = [
+    json.dumps({"choices": []}),
+    json.dumps({"foo": 1}),
+    "not json",
+    json.dumps({"choices": [{"message": {}}]}),
+]
+
+
+@pytest.mark.parametrize("body_text", _PORTKEY_MALFORMED_BODIES)
+def test_nfr002_portkey_malformed_2xx_body_raises_provider_http_malformed_response(
+    body_text: str,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=body_text.encode())
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    settings = Settings(llm_provider="portkey", portkey_api_key=SECRET_PORTKEY_KEY)
+    provider = make_provider(settings, client=client)
+
+    with pytest.raises(FathomError) as excinfo:
+        provider.complete_json("s", "u", 100)
+
+    error = excinfo.value
+    assert error.code == Code.PROVIDER_HTTP
+    assert error.details == {
+        "status": 200,
+        "provider": "portkey",
+        "reason": "malformed response",
+    }
+    assert error.message == "portkey provider request failed (reason=malformed response)"
+    assert body_text not in error.message
+    assert body_text not in json.dumps(error.details)
+    assert SECRET_PORTKEY_KEY not in error.message
+
+
+_ANTHROPIC_MALFORMED_BODIES = [
+    json.dumps({"content": []}),
+    json.dumps({"foo": 1}),
+    "not json",
+    json.dumps({"content": [{"type": "text"}]}),
+]
+
+
+@pytest.mark.parametrize("body_text", _ANTHROPIC_MALFORMED_BODIES)
+def test_nfr002_anthropic_malformed_2xx_body_raises_provider_http_malformed_response(
+    body_text: str,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=body_text.encode())
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    settings = Settings(llm_provider="anthropic", anthropic_api_key=SECRET_ANTHROPIC_KEY)
+    provider = make_provider(settings, client=client)
+
+    with pytest.raises(FathomError) as excinfo:
+        provider.complete_json("s", "u", 100)
+
+    error = excinfo.value
+    assert error.code == Code.PROVIDER_HTTP
+    assert error.details == {
+        "status": 200,
+        "provider": "anthropic",
+        "reason": "malformed response",
+    }
+    assert error.message == "anthropic provider request failed (reason=malformed response)"
+    assert body_text not in error.message
+    assert body_text not in json.dumps(error.details)
+    assert SECRET_ANTHROPIC_KEY not in error.message
+
+
 # --- AC4: PROVIDER_CONFIG raised before any client is built --------------------------------------
 
 

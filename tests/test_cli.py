@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import httpx
 import pytest
 from typer.testing import CliRunner
 
@@ -90,6 +91,26 @@ def test_fr013_ask_text_rendering_shows_ticker_and_disclaimer() -> None:
     assert DEFAULT_DISCLAIMER in result.stdout
 
 
+# --- T-015 AC4 (D-010): guarded claim with no source accession renders "(no source)" -----------
+
+
+def test_fr013_ask_guarded_claim_renders_no_source_not_question_marks() -> None:
+    result = runner.invoke(app, ["ask", "AAPL", "Should I buy Apple stock?"])
+
+    assert result.exit_code == 0
+    assert "(no source)" in result.stdout
+    assert "(? ? ?)" not in result.stdout
+
+
+def test_fr013_ask_guarded_claim_json_rendering_unchanged() -> None:
+    result = runner.invoke(app, ["ask", "AAPL", "Should I buy Apple stock?", "--json"])
+
+    assert result.exit_code == 0
+    answer = Answer.model_validate_json(result.stdout)
+    assert answer.claims[0].guarded is True
+    assert answer.claims[0].source.accession == ""
+
+
 # --- AC2: probe ----------------------------------------------------------------------------
 
 
@@ -161,3 +182,37 @@ def test_fr013_ask_question_at_2000_chars_is_accepted() -> None:
     result = runner.invoke(app, ["ask", "AAPL", "x" * 2000, "--json"])
 
     assert result.exit_code == 0
+
+
+# --- T-015 AC3 (D-010): live-mode transport error surfaces as PROVIDER_HTTP, exit 2 -------------
+
+
+def test_nfr002_brief_portkey_connect_error_exits_2_with_reason(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A gateway that refuses the connection surfaces as `PROVIDER_HTTP`, never a raw exception.
+
+    The transport is monkeypatched (an `httpx.MockTransport` that always raises
+    `httpx.ConnectError`); no real socket is opened.
+    """
+
+    real_client_cls = httpx.Client
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    def fake_client(*args: object, **kwargs: object) -> httpx.Client:
+        return real_client_cls(transport=httpx.MockTransport(handler))
+
+    monkeypatch.setattr("fathom.providers.httpx.Client", fake_client)
+    monkeypatch.setenv("FATHOM_LLM_PROVIDER", "portkey")
+    monkeypatch.setenv("PORTKEY_API_KEY", "x")
+    monkeypatch.setenv("PORTKEY_BASE_URL", "http://127.0.0.1:9/v1")
+
+    result = runner.invoke(app, ["brief", "AAPL"])
+
+    assert result.exit_code == 2
+    assert (
+        "error PROVIDER_HTTP: portkey provider request failed (reason=ConnectError)"
+        in result.output
+    )
