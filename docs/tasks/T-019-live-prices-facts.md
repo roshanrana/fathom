@@ -54,3 +54,12 @@ rows with null close dropped; timestamps → UTC dates. Stooq CSV header `Date,O
 B6 — Security Reviewer at T2 (malformed JSON/CSV handling).
 
 ## Handoff (Implementer fills, ≤10 lines)
+Implemented `fathom/live/prices.py` (`PriceClient.daily_bars`, Yahoo primary/Stooq fallback,
+BRK.B->BRK-B/brk-b.us mapping) and `fathom/live/facts.py` (`snapshot`, XBRL TTM/latest formulas).
+Fixtures recorded live via a scratch script (Yahoo 3mo trimmed to 30 bars; SEC 4 concepts for
+CIK 0000320193, last 8 entries/unit); Stooq returned a JS bot-challenge page instead of the
+documented 503, saved as the maintenance fixture, with a 30-row CSV hand-derived from Yahoo closes.
+`snapshot_source` is the fixed string "SEC XBRL companyconcept (shares, EPS TTM, equity, DPS TTM)"
+— no price-source suffix, since `snapshot()`'s frozen signature has none; `quote_time` unused.
+Targeted tests (18) + full gate green: 339 passed, coverage 95.88%, mypy strict clean, no network.
+Did not modify http.py/sec.py.
