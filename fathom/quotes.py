@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,29 @@ from fathom.errors import Code, FathomError
 
 BARS_SOURCE = "AlphaDojo/dojo_stock_kline via data/bars.parquet"
 QUOTES_SOURCE = "AlphaDojo/dojo_quote via data/quotes.parquet"
+
+
+def _live_sources(data_dir: Path) -> tuple[str | None, str | None]:
+    """(bars_source, snapshot_source) from `data_dir`'s `manifest.json`, if present (T-020).
+
+    Live-materialized directories carry a manifest (written by `fathom.live.build.materialize`)
+    naming the actual price/snapshot source; fixture directories have none, so callers fall
+    back to the `BARS_SOURCE`/`QUOTES_SOURCE` constants.
+    """
+    manifest_path = data_dir / "manifest.json"
+    if not manifest_path.exists():
+        return None, None
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None, None
+    bars_source = manifest.get("bars_source")
+    snapshot_source = manifest.get("snapshot_source")
+    return (
+        bars_source if isinstance(bars_source, str) else None,
+        snapshot_source if isinstance(snapshot_source, str) else None,
+    )
+
 
 _WEEK52_WINDOW_DAYS = 365
 _ONE_YEAR_WINDOW_DAYS = 365
@@ -104,7 +128,15 @@ def _snapshot_for(
     dividend_yield = _optional_float(snap["dividend_yield"])
     quote_time: pd.Timestamp = snap["quote_time"]
     snapshot_as_of = quote_time.to_pydatetime()
-    return market_cap, pe, pb, dividend_yield, snapshot_as_of, QUOTES_SOURCE
+    _, live_snapshot_source = _live_sources(data_dir)
+    return (
+        market_cap,
+        pe,
+        pb,
+        dividend_yield,
+        snapshot_as_of,
+        live_snapshot_source or QUOTES_SOURCE,
+    )
 
 
 def quote_card(ticker: str, data_dir: Path) -> QuoteCard:
@@ -147,11 +179,12 @@ def quote_card(ticker: str, data_dir: Path) -> QuoteCard:
     market_cap, pe, pb, dividend_yield, snapshot_as_of, snapshot_source = _snapshot_for(
         symbol, data_dir
     )
+    live_bars_source, _ = _live_sources(data_dir)
 
     return QuoteCard(
         ticker=symbol,
         as_of=as_of,
-        source=BARS_SOURCE,
+        source=live_bars_source or BARS_SOURCE,
         last_close=round(last_close, _ROUND_DP),
         prev_close=round(prev_close, _ROUND_DP),
         change_abs=change_abs,

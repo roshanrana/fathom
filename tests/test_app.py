@@ -242,3 +242,83 @@ def test_fr002_ac6_page_metrics_render_untruncated_with_one_source_caption(
     caption_values = [c.value for c in at.caption]
     source_captions = [c for c in caption_values if c.startswith("Prices:")]
     assert len(source_captions) == 1
+
+
+# --- T-020 (FR-020, AC6): live-mode sidebar wiring ---------------------------------------------
+
+
+def _set_live_app_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("FATHOM_LLM_PROVIDER", "offline")
+    monkeypatch.setenv("FATHOM_DATA_DIR", str(REPO_ROOT / "data"))
+    monkeypatch.setenv("FATHOM_AUDIT_PATH", str(tmp_path / "audit" / "fathom-audit.jsonl"))
+    monkeypatch.setenv("FATHOM_DATA_SOURCE", "live")
+    monkeypatch.setenv("FATHOM_SEC_CONTACT", "t@example.com")
+
+
+def _prepared_live_cache_dir(tmp_path: Path) -> Path:
+    """A tmp copy of the real AAPL-shaped fixtures, plus a manifest.json (never touch data/)."""
+    import json
+    import shutil
+
+    live_dir = tmp_path / "live_cache" / "AAPL"
+    live_dir.mkdir(parents=True)
+    for name in ("filings", "bars", "quotes", "companies"):
+        shutil.copy(REPO_ROOT / "data" / f"{name}.parquet", live_dir / f"{name}.parquet")
+    (live_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "fetched_at": "2026-09-01T12:34:56+00:00",
+                "bars_source": "yahoo via .cache/live/AAPL/bars.parquet",
+                "snapshot_source": "SEC XBRL companyconcept (shares, EPS TTM, equity, DPS TTM)"
+                " × yahoo close",
+            }
+        ),
+        encoding="utf-8",
+    )
+    return live_dir
+
+
+def test_fr020_ac6_live_mode_shows_ticker_input_and_fetch_button(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import fathom.live as live_module
+
+    live_dir = _prepared_live_cache_dir(tmp_path)
+    monkeypatch.setattr(live_module, "data_dir_for", lambda ticker, settings: live_dir)
+    _set_live_app_env(monkeypatch, tmp_path)
+
+    at = AppTest.from_file(APP_PATH, default_timeout=120).run()
+    assert not at.exception
+    assert len(at.sidebar.radio) == 1
+    assert at.sidebar.radio[0].value.startswith("Live")
+    assert len(at.sidebar.text_input) >= 1
+    assert len(at.sidebar.button) >= 1
+
+    at = at.sidebar.text_input[0].input("AAPL").run()
+    assert not at.exception
+    assert at.header[0].value  # company header rendered from the live cache
+
+    caption_values = [c.value for c in at.caption]
+    assert any("source: live" in c and "fetched 2026-09-01T12:34" in c for c in caption_values), (
+        caption_values
+    )
+
+
+def test_fr020_ac6_source_http_from_data_dir_for_renders_as_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import fathom.live as live_module
+    from fathom.errors import Code, FathomError
+
+    def failing_data_dir_for(ticker: str, settings: object) -> Path:
+        raise FathomError(Code.SOURCE_HTTP, "yahoo returned status 503", {"source": "yahoo"})
+
+    monkeypatch.setattr(live_module, "data_dir_for", failing_data_dir_for)
+    _set_live_app_env(monkeypatch, tmp_path)
+
+    at = AppTest.from_file(APP_PATH, default_timeout=120).run()
+    at = at.sidebar.text_input[0].input("AAPL").run()
+
+    assert not at.exception
+    error_values = [e.value for e in at.error]
+    assert any("SOURCE_HTTP" in value for value in error_values)

@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import functools
+import re
 from pathlib import Path
 from typing import Literal
 
 import pandas as pd
 from pydantic import BaseModel
 
-from fathom.config import UNIVERSE
+from fathom.config import UNIVERSE, Settings
 from fathom.errors import Code, FathomError
 
 FixtureName = Literal["filings", "bars", "quotes", "companies"]
+
+# 05-m4-live-data.md §5 (frozen): live-mode ticker shape, checked after upper-casing.
+_LIVE_TICKER_RE = re.compile(r"^[A-Z][A-Z0-9.\-]{0,9}$")
 
 
 class Company(BaseModel):
@@ -39,9 +43,23 @@ def load_frame(name: FixtureName, data_dir: Path) -> pd.DataFrame:
     return pd.read_parquet(path)
 
 
-def require_ticker(ticker: str) -> str:
-    """Upper-case and validate a ticker against `UNIVERSE`."""
+def require_ticker(ticker: str, settings: Settings | None = None) -> str:
+    """Upper-case and validate a ticker (05-m4-live-data.md §5).
+
+    Fixture mode (`settings` is `None` or `settings.data_source == "fixture"`): unchanged,
+    validated against the fixed `UNIVERSE`. Live mode: only the shape
+    `^[A-Z][A-Z0-9.\\-]{0,9}$` is checked here; actual existence is deferred to
+    `SecClient.lookup` when the ticker is materialized.
+    """
     upper = ticker.upper()
+    if settings is not None and settings.data_source == "live":
+        if not _LIVE_TICKER_RE.match(upper):
+            raise FathomError(
+                Code.UNKNOWN_TICKER,
+                f"invalid ticker format {upper!r}",
+                {"ticker": upper},
+            )
+        return upper
     if upper not in UNIVERSE:
         raise FathomError(
             Code.UNKNOWN_TICKER,

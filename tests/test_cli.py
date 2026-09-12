@@ -216,3 +216,112 @@ def test_nfr002_brief_portkey_connect_error_exits_2_with_reason(
         "error PROVIDER_HTTP: portkey provider request failed (reason=ConnectError)"
         in result.output
     )
+
+
+# --- T-020 (FR-020, FR-024): --source routing and the `fetch` command --------------------------
+
+
+def test_fr020_quote_source_fixture_forces_fixture_on_live_configured_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`--source fixture` on a live-configured process still reads the fixtures."""
+    monkeypatch.setenv("FATHOM_DATA_SOURCE", "live")
+    monkeypatch.setenv("FATHOM_SEC_CONTACT", "t@example.com")
+
+    result = runner.invoke(app, ["quote", "AAPL", "--source", "fixture"])
+
+    assert result.exit_code == 0
+    assert "AAPL" in result.stdout
+
+
+def test_fr020_quote_source_live_missing_contact_exits_2_with_source_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("FATHOM_SEC_CONTACT", raising=False)
+
+    result = runner.invoke(app, ["quote", "AAPL", "--source", "live"])
+
+    assert result.exit_code == 2
+    assert "error SOURCE_CONFIG:" in result.output
+    assert "FATHOM_SEC_CONTACT" in result.output
+
+
+def test_fr020_quote_source_live_routes_through_data_dir_for(
+    monkeypatch: pytest.MonkeyPatch, data_dir: Path
+) -> None:
+    """`--source live` must call `data_dir_for`; a monkeypatched live cache dir is honoured."""
+    import fathom.cli as cli_module
+
+    calls: list[tuple[str, object]] = []
+
+    def fake_data_dir_for(ticker: str, settings: object) -> Path:
+        calls.append((ticker, settings))
+        return data_dir
+
+    monkeypatch.setattr(cli_module, "data_dir_for", fake_data_dir_for)
+    monkeypatch.setenv("FATHOM_SEC_CONTACT", "t@example.com")
+
+    result = runner.invoke(app, ["quote", "AAPL", "--source", "live"])
+
+    assert result.exit_code == 0
+    assert "AAPL" in result.stdout
+    assert len(calls) == 1
+    assert calls[0][0] == "AAPL"
+
+
+def test_fr024_fetch_command_prints_filings_bars_and_snapshot_coverage(
+    monkeypatch: pytest.MonkeyPatch, data_dir: Path, tmp_path: Path
+) -> None:
+    import fathom.cli as cli_module
+    from fathom.live.build import LiveManifest
+    from fathom.live.sec import SecFiling
+
+    fake_manifest = LiveManifest(
+        ticker="AAPL",
+        cik="0000320193",
+        fetched_at="2026-09-01T00:00:00+00:00",
+        data_dir=str(data_dir),
+        filings=[
+            SecFiling(
+                cik="0000320193",
+                accession="0000320193-25-000079",
+                form="10-K",
+                filing_date="2025-10-31",
+                report_date="2025-09-27",
+                primary_document="aapl-20250927.htm",
+                url="https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/aapl-20250927.htm",
+            )
+        ],
+        bars_source="yahoo via .cache/live/AAPL/bars.parquet",
+        bars_from="2025-09-01",
+        bars_to="2026-09-01",
+        snapshot_source="SEC XBRL companyconcept (shares, EPS TTM, equity, DPS TTM) x yahoo close",
+        sections_coverage={"0000320193-25-000079": ["10-K:1A", "10-K:7"]},
+    )
+
+    def fake_materialize(ticker: str, settings: object, force: bool = False) -> LiveManifest:
+        return fake_manifest
+
+    monkeypatch.setattr(cli_module, "materialize", fake_materialize)
+
+    result = runner.invoke(app, ["fetch", "AAPL"])
+
+    assert result.exit_code == 0
+    assert "cik=0000320193" in result.stdout
+    assert "10-K 2025-10-31 0000320193-25-000079 sections=10-K:1A,10-K:7" in result.stdout
+    assert "bars 2025-09-01..2026-09-01 source=yahoo via .cache/live/AAPL/bars.parquet" in (
+        result.stdout
+    )
+    assert "snapshot=" in result.stdout
+    assert "fields_present=" in result.stdout
+
+
+def test_fr024_fetch_command_propagates_source_config_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("FATHOM_SEC_CONTACT", raising=False)
+
+    result = runner.invoke(app, ["fetch", "AAPL"])
+
+    assert result.exit_code == 2
+    assert "error SOURCE_CONFIG:" in result.output

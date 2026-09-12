@@ -1,0 +1,307 @@
+"""Tests for fathom.live.build.materialize (RTM: FR-020, FR-021, FR-022, FR-023, FR-024, NFR-012).
+
+All tests use `httpx.MockTransport`; no real network call is ever made (NFR-013).
+"""
+
+from __future__ import annotations
+
+import json
+from datetime import UTC, datetime
+from pathlib import Path
+
+import httpx
+import pandas as pd
+import pytest
+
+from fathom.ask import ask
+from fathom.briefing import brief
+from fathom.config import Settings
+from fathom.errors import Code, FathomError
+from fathom.filings import filings_for, sections_for
+from fathom.live.build import LiveManifest, materialize
+from fathom.live.http import LiveHttp
+from fathom.quotes import quote_card
+
+FIXTURES = Path(__file__).resolve().parent / "fixtures" / "live"
+
+_COMPANY_TICKERS = (FIXTURES / "company_tickers.json").read_bytes()
+_AAPL_SUBMISSIONS = (FIXTURES / "aapl_submissions.json").read_bytes()
+_AAPL_10Q = (FIXTURES / "aapl_10q.htm").read_bytes()
+_AAPL_10K = (FIXTURES / "aapl_10k.htm").read_bytes()
+_YAHOO_CHART = (FIXTURES / "yahoo_chart_aapl.json").read_bytes()
+_SHARES = (FIXTURES / "aapl_shares_outstanding.json").read_bytes()
+_EPS = (FIXTURES / "aapl_eps_diluted.json").read_bytes()
+_EQUITY = (FIXTURES / "aapl_stockholders_equity.json").read_bytes()
+_DIVIDENDS = (FIXTURES / "aapl_dividends_per_share.json").read_bytes()
+
+_10Q_DOC_SUFFIXES = (
+    "/aapl-20260627.htm",
+    "/aapl-20260328.htm",
+    "/aapl-20251227.htm",
+    "/aapl-20250628.htm",
+)
+_10K_DOC_SUFFIX = "/aapl-20250927.htm"
+
+_CONCEPT_BODIES = {
+    "EntityCommonStockSharesOutstanding": _SHARES,
+    "EarningsPerShareDiluted": _EPS,
+    "StockholdersEquity": _EQUITY,
+    "CommonStockDividendsPerShareDeclared": _DIVIDENDS,
+}
+
+_EXPECTED_10K_SECTIONS = ["10-K:1", "10-K:1A", "10-K:1C", "10-K:3", "10-K:7", "10-K:7A", "10-K:9A"]
+_EXPECTED_10Q_SECTIONS = ["10-Q:I.2", "10-Q:I.3", "10-Q:I.4", "10-Q:II.1", "10-Q:II.1A"]
+
+
+def _default_handler(request: httpx.Request) -> httpx.Response:
+    url = str(request.url)
+    if url == "https://www.sec.gov/files/company_tickers.json":
+        return httpx.Response(200, content=_COMPANY_TICKERS)
+    if url == "https://data.sec.gov/submissions/CIK0000320193.json":
+        return httpx.Response(200, content=_AAPL_SUBMISSIONS)
+    if url.endswith(_10K_DOC_SUFFIX):
+        return httpx.Response(200, content=_AAPL_10K)
+    if url.endswith(_10Q_DOC_SUFFIXES):
+        return httpx.Response(200, content=_AAPL_10Q)
+    if url.startswith("https://query1.finance.yahoo.com/v8/finance/chart/"):
+        return httpx.Response(200, content=_YAHOO_CHART)
+    if "companyconcept" in url:
+        for concept, body in _CONCEPT_BODIES.items():
+            if url.endswith(f"/{concept}.json"):
+                return httpx.Response(200, content=body)
+        return httpx.Response(404)
+    return httpx.Response(404)
+
+
+def _make_http(
+    tmp_path: Path, handler: object = _default_handler
+) -> tuple[LiveHttp, list[httpx.Request]]:
+    calls: list[httpx.Request] = []
+
+    def wrapped(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return handler(request)  # type: ignore[operator]
+
+    client = httpx.Client(transport=httpx.MockTransport(wrapped))
+    http = LiveHttp(
+        cache_dir=tmp_path / "live", user_agent="Fathom/0.1.0 (t@example.com)", client=client
+    )
+    return http, calls
+
+
+def _settings(tmp_path: Path, **overrides: object) -> Settings:
+    fields: dict[str, object] = {
+        "data_source": "live",
+        "sec_contact": "t@example.com",
+        "live_cache_dir": tmp_path / "live",
+        "audit_path": tmp_path / "audit.jsonl",
+    }
+    fields.update(overrides)
+    return Settings(**fields)  # type: ignore[arg-type]
+
+
+def _clock_at(when: datetime) -> object:
+    return lambda: when
+
+
+# --- AC1: schema + manifest + TTL + force -----------------------------------------------------
+
+
+def test_fr024_materialize_writes_four_fixture_shaped_tables_and_manifest(tmp_path: Path) -> None:
+    http, calls = _make_http(tmp_path)
+    settings = _settings(tmp_path)
+    now = datetime(2026, 9, 1, tzinfo=UTC)
+
+    manifest = materialize("aapl", settings, http=http, clock=_clock_at(now))
+
+    assert manifest.ticker == "AAPL"
+    assert manifest.cik == "0000320193"
+    assert manifest.fetched_at == now
+    live_dir = Path(manifest.data_dir)
+    assert live_dir == tmp_path / "live" / "AAPL"
+
+    filings_frame = pd.read_parquet(live_dir / "filings.parquet")
+    assert list(filings_frame.columns) == [
+        "ticker",
+        "cik",
+        "company_name",
+        "form",
+        "filing_date",
+        "accession",
+        "text",
+        "n_chars",
+    ]
+    assert len(filings_frame) == 5
+    assert set(filings_frame["ticker"]) == {"AAPL"}
+
+    bars_frame = pd.read_parquet(live_dir / "bars.parquet")
+    assert list(bars_frame.columns) == ["symbol", "date", "open", "high", "low", "close", "volume"]
+    assert not bars_frame.empty
+
+    quotes_frame = pd.read_parquet(live_dir / "quotes.parquet")
+    assert list(quotes_frame.columns) == [
+        "symbol",
+        "quote_time",
+        "last_price",
+        "pre_close",
+        "change_percent",
+        "volume",
+        "market_cap",
+        "pe",
+        "pb",
+        "dividend_yield",
+    ]
+    assert len(quotes_frame) == 1
+
+    companies_frame = pd.read_parquet(live_dir / "companies.parquet")
+    assert list(companies_frame.columns) == [
+        "ticker",
+        "long_name",
+        "full_exchange_name",
+        "sector",
+        "industry",
+        "website",
+    ]
+    row = companies_frame.iloc[0]
+    assert row["long_name"] == "Apple Inc."
+    assert row["website"] == ""
+
+    manifest_on_disk = LiveManifest.model_validate_json(
+        (live_dir / "manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest_on_disk == manifest
+
+    ten_k = next(f for f in manifest.filings if f.form == "10-K")
+    ten_qs = [f for f in manifest.filings if f.form == "10-Q"]
+    assert len(ten_qs) == 4
+    assert manifest.sections_coverage[ten_k.accession] == _EXPECTED_10K_SECTIONS
+    for filing in ten_qs:
+        assert manifest.sections_coverage[filing.accession] == _EXPECTED_10Q_SECTIONS
+
+    assert manifest.bars_source.startswith(("yahoo via", "stooq via"))
+    assert manifest.bars_source.endswith(".cache/live/AAPL/bars.parquet")
+    assert "SEC XBRL companyconcept" in manifest.snapshot_source
+    assert "close" in manifest.snapshot_source
+
+    assert len(calls) > 0
+
+
+def test_fr024_second_call_within_ttl_performs_zero_http_calls(tmp_path: Path) -> None:
+    http, calls = _make_http(tmp_path)
+    settings = _settings(tmp_path)
+    now = datetime(2026, 9, 1, tzinfo=UTC)
+
+    materialize("AAPL", settings, http=http, clock=_clock_at(now))
+    first_call_count = len(calls)
+    assert first_call_count > 0
+
+    second = materialize("AAPL", settings, http=http, clock=_clock_at(now))
+
+    assert len(calls) == first_call_count, "a fresh manifest must short-circuit before any HTTP"
+    assert second.fetched_at == now
+
+
+def test_fr024_force_true_recomputes_and_bumps_fetched_at(tmp_path: Path) -> None:
+    http, calls = _make_http(tmp_path)
+    settings = _settings(tmp_path)
+    first_time = datetime(2026, 9, 1, tzinfo=UTC)
+    second_time = datetime(2026, 9, 1, 0, 5, tzinfo=UTC)
+
+    first = materialize("AAPL", settings, http=http, clock=_clock_at(first_time))
+    second = materialize("AAPL", settings, force=True, http=http, clock=_clock_at(second_time))
+
+    assert first.fetched_at == first_time
+    assert second.fetched_at == second_time
+    assert second.fetched_at > first.fetched_at
+
+
+def test_fr024_ttl_expiry_triggers_refetch_without_force(tmp_path: Path) -> None:
+    http, _ = _make_http(tmp_path)
+    settings = _settings(tmp_path, live_ttl_hours=1.0)
+    first_time = datetime(2026, 9, 1, tzinfo=UTC)
+    later_time = datetime(2026, 9, 1, 2, 0, tzinfo=UTC)  # 2h later, past the 1h TTL
+
+    materialize("AAPL", settings, http=http, clock=_clock_at(first_time))
+    second = materialize("AAPL", settings, http=http, clock=_clock_at(later_time))
+
+    assert second.fetched_at == later_time
+
+
+def test_fr020_materialize_missing_contact_raises_source_config(tmp_path: Path) -> None:
+    settings = _settings(tmp_path, sec_contact=None)
+
+    with pytest.raises(FathomError) as excinfo:
+        materialize("AAPL", settings)
+
+    assert excinfo.value.code == Code.SOURCE_CONFIG
+    assert "FATHOM_SEC_CONTACT" in excinfo.value.message
+
+
+def test_fr022_materialize_empty_bars_raises_source_http(tmp_path: Path) -> None:
+    """`PriceClient` itself now treats a 200-but-empty chart as a malformed response.
+
+    Both Yahoo (empty) and the Stooq fallback (404, unmocked) fail here, so `daily_bars`
+    raises `SOURCE_HTTP`; `materialize`'s own `bars.empty` guard is a defensive no-op given
+    that `PriceClient` contract (it never returns an empty frame successfully).
+    """
+    empty_chart = json.dumps(
+        {
+            "chart": {
+                "result": [
+                    {
+                        "timestamp": [],
+                        "indicators": {
+                            "quote": [
+                                {"open": [], "high": [], "low": [], "close": [], "volume": []}
+                            ]
+                        },
+                    }
+                ]
+            }
+        }
+    ).encode()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if url.startswith("https://query1.finance.yahoo.com/v8/finance/chart/"):
+            return httpx.Response(200, content=empty_chart)
+        return _default_handler(request)
+
+    http, _ = _make_http(tmp_path, handler)
+    settings = _settings(tmp_path)
+
+    with pytest.raises(FathomError) as excinfo:
+        materialize("AAPL", settings, http=http)
+
+    assert excinfo.value.code == Code.SOURCE_HTTP
+
+
+# --- AC3: end-to-end offline on the materialized cache -----------------------------------------
+
+
+def test_fr020_ac3_end_to_end_offline_on_materialized_cache(tmp_path: Path) -> None:
+    http, _ = _make_http(tmp_path)
+    settings = _settings(tmp_path, llm_provider="offline")
+    manifest = materialize("AAPL", settings, http=http)
+    live_dir = Path(manifest.data_dir)
+
+    card = quote_card("AAPL", live_dir)
+    assert card.ticker == "AAPL"
+    assert card.source.endswith(".cache/live/AAPL/bars.parquet")
+    assert card.snapshot_source is not None
+    assert "SEC XBRL companyconcept" in card.snapshot_source
+    assert card.snapshot_source.endswith("close")
+
+    filings = filings_for("AAPL", live_dir)
+    assert len(filings) == 5
+
+    ten_k = next(f for f in filings if f.form == "10-K")
+    sections = sections_for(ten_k.accession, live_dir)
+    assert {s.section_id for s in sections} == set(_EXPECTED_10K_SECTIONS)
+
+    briefing = brief("AAPL", settings, provider=None)
+    assert briefing.ticker == "AAPL"
+    assert len(briefing.filings_used) == 3
+
+    answer = ask("AAPL", "What are the main risk factors?", settings, provider=None)
+    assert answer.ticker == "AAPL"

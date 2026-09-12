@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -235,3 +237,112 @@ def test_fr014_every_response_has_all_four_envelope_keys(data_dir: Path, tmp_pat
 
     for response in responses:
         assert set(response.json().keys()) == _ENVELOPE_KEYS
+
+
+# --- T-020 (FR-020, AC5): ?source= query param, meta.source, live routing via injected http ----
+
+
+_LIVE_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "live"
+
+
+def _live_handler() -> Callable[[httpx.Request], httpx.Response]:
+    company_tickers = (_LIVE_FIXTURES / "company_tickers.json").read_bytes()
+    submissions = (_LIVE_FIXTURES / "aapl_submissions.json").read_bytes()
+    doc_10q = (_LIVE_FIXTURES / "aapl_10q.htm").read_bytes()
+    doc_10k = (_LIVE_FIXTURES / "aapl_10k.htm").read_bytes()
+    yahoo_chart = (_LIVE_FIXTURES / "yahoo_chart_aapl.json").read_bytes()
+    concepts = {
+        "EntityCommonStockSharesOutstanding": (
+            _LIVE_FIXTURES / "aapl_shares_outstanding.json"
+        ).read_bytes(),
+        "EarningsPerShareDiluted": (_LIVE_FIXTURES / "aapl_eps_diluted.json").read_bytes(),
+        "StockholdersEquity": (_LIVE_FIXTURES / "aapl_stockholders_equity.json").read_bytes(),
+        "CommonStockDividendsPerShareDeclared": (
+            _LIVE_FIXTURES / "aapl_dividends_per_share.json"
+        ).read_bytes(),
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if url == "https://www.sec.gov/files/company_tickers.json":
+            return httpx.Response(200, content=company_tickers)
+        if url == "https://data.sec.gov/submissions/CIK0000320193.json":
+            return httpx.Response(200, content=submissions)
+        if url.endswith("/aapl-20250927.htm"):
+            return httpx.Response(200, content=doc_10k)
+        if url.endswith(
+            (
+                "/aapl-20260627.htm",
+                "/aapl-20260328.htm",
+                "/aapl-20251227.htm",
+                "/aapl-20250628.htm",
+            )
+        ):
+            return httpx.Response(200, content=doc_10q)
+        if url.startswith("https://query1.finance.yahoo.com/v8/finance/chart/"):
+            return httpx.Response(200, content=yahoo_chart)
+        if "companyconcept" in url:
+            for concept, body in concepts.items():
+                if url.endswith(f"/{concept}.json"):
+                    return httpx.Response(200, content=body)
+            return httpx.Response(404)
+        return httpx.Response(404)
+
+    return handler
+
+
+def test_fr020_meta_source_present_and_defaults_to_settings_data_source(
+    data_dir: Path, tmp_path: Path
+) -> None:
+    client = _client(data_dir, tmp_path)
+
+    response = client.get("/api/quote/AAPL")
+
+    assert response.json()["meta"]["source"] == "fixture"
+
+
+def test_fr020_source_query_param_bogus_returns_422(data_dir: Path, tmp_path: Path) -> None:
+    client = _client(data_dir, tmp_path)
+
+    response = client.get("/api/quote/AAPL?source=bogus")
+
+    assert response.status_code == 422
+    body = response.json()
+    assert set(body.keys()) == _ENVELOPE_KEYS
+    assert body["ok"] is False
+
+
+def test_fr020_quote_source_live_routes_through_injected_mock_transport(
+    data_dir: Path, tmp_path: Path
+) -> None:
+    from fathom.live.http import LiveHttp
+
+    calls: list[httpx.Request] = []
+
+    def wrapped(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return _live_handler()(request)
+
+    transport_client = httpx.Client(transport=httpx.MockTransport(wrapped))
+    http = LiveHttp(
+        cache_dir=tmp_path / "live",
+        user_agent="Fathom/0.1.0 (t@example.com)",
+        client=transport_client,
+    )
+    settings = _settings(
+        data_dir,
+        tmp_path,
+        sec_contact="t@example.com",
+        live_cache_dir=tmp_path / "live",
+    )
+    client = TestClient(create_app(settings, http=http))
+
+    response = client.get("/api/quote/AAPL?source=live")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["meta"]["source"] == "live"
+    QuoteCard.model_validate(body["data"])
+    assert body["data"]["source"].endswith(".cache/live/AAPL/bars.parquet")
+    assert len(calls) > 0

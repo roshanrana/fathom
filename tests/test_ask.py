@@ -331,3 +331,28 @@ def test_fr009_ask_never_logs_or_audits_question_text(
 
     audit_text = settings.audit_path.read_text(encoding="utf-8")
     assert nonce not in audit_text
+
+
+# --- T-020 (FR-020): ask() routes through data_dir_for ---------------------------------------
+
+
+def test_fr020_ask_routes_through_data_dir_for(
+    tmp_path: Path, data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`ask()` must resolve its data directory via `data_dir_for`, not `settings.data_dir`."""
+    import fathom.ask as ask_module
+
+    calls: list[tuple[str, Settings]] = []
+    real_data_dir_for = ask_module.data_dir_for
+
+    def spy(ticker: str, settings: Settings) -> Path:
+        calls.append((ticker, settings))
+        return real_data_dir_for(ticker, settings)
+
+    monkeypatch.setattr(ask_module, "data_dir_for", spy)
+    settings = _settings(tmp_path, data_dir=data_dir)
+
+    result = ask("AAPL", "What are the main risk factors?", settings, provider=None)
+
+    assert result.ticker == "AAPL"
+    assert calls == [("AAPL", settings)]

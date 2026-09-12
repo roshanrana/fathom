@@ -57,3 +57,14 @@ pre_close, change_percent, volume, + snapshot fields. TTL: if `manifest.json` ex
 B1 (free-text ticker input validated by regex + SEC map), B6 — Security Reviewer at T2.
 
 ## Handoff (Implementer fills, ≤10 lines)
+Added `fathom/live/build.py` (`LiveManifest`, `materialize`) and filled `fathom/live/__init__.py`
+(`data_dir_for`, `is_live`); wired `data.require_ticker(ticker, settings=None)`, `briefing.brief`,
+`ask.ask`, `cli.py` (`--source`, new `fetch` command), `api.py` (`?source=`, `meta.source`,
+`create_app(..., http=...)`), `mcp_server.py` (`source` arg), `app/main.py` + `rendering.py`
+(radio/ticker-box/Fetch/status strip). Scope exception used: `fathom/quotes.py` reads
+`manifest.json` (bars_source/snapshot_source) for `QuoteCard.source`/`snapshot_source`, falling
+back to fixture constants — no schema change to `quotes.parquet`.
+`prices.py`/`facts.py` changed underfoot mid-task (not by me, not http.py/sec.py); adapted:
+empty-bars now raises `SOURCE_HTTP` not `SOURCE_EMPTY` (see test_live_build.py note) — my
+`bars.empty` guard in `materialize` is now defensive dead code, left in place, harmless.
+Gate green (385 tests, 95.67% cov, mypy x2, ruff, secrets, bench, card drift), no network.

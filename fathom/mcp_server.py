@@ -12,6 +12,7 @@ host surfaces it to the caller without an extra round trip.
 from __future__ import annotations
 
 import json
+from typing import Literal
 
 from mcp.server.fastmcp import FastMCP
 
@@ -20,6 +21,7 @@ from fathom.briefing import brief as brief_flow
 from fathom.config import Settings
 from fathom.errors import FathomError
 from fathom.filings import filings_for
+from fathom.live import data_dir_for
 from fathom.quotes import quote_card
 
 _DISCLAIMER = Settings().disclaimer
@@ -51,32 +53,40 @@ def _error_json(exc: FathomError) -> str:
     return json.dumps({"ok": False, "error": {"code": exc.code.value, "message": exc.message}})
 
 
-@server.tool(description=_GET_QUOTE_DESC)
-def get_quote(ticker: str) -> str:
-    """Return `QuoteCard.model_dump_json()` for `ticker`, or the error envelope."""
+def _settings(source: Literal["fixture", "live"] | None) -> Settings:
+    """`Settings.from_env()`, optionally overridden by an explicit `source` argument."""
     settings = Settings.from_env()
+    if source is not None:
+        settings = settings.model_copy(update={"data_source": source})
+    return settings
+
+
+@server.tool(description=_GET_QUOTE_DESC)
+def get_quote(ticker: str, source: Literal["fixture", "live"] | None = None) -> str:
+    """Return `QuoteCard.model_dump_json()` for `ticker`, or the error envelope."""
+    settings = _settings(source)
     try:
-        card = quote_card(ticker, settings.data_dir)
+        card = quote_card(ticker, data_dir_for(ticker, settings))
     except FathomError as exc:
         return _error_json(exc)
     return card.model_dump_json()
 
 
 @server.tool(description=_LIST_FILINGS_DESC)
-def list_filings(ticker: str) -> str:
+def list_filings(ticker: str, source: Literal["fixture", "live"] | None = None) -> str:
     """Return the JSON array of `Filing` records for `ticker`, or the error envelope."""
-    settings = Settings.from_env()
+    settings = _settings(source)
     try:
-        filings = filings_for(ticker, settings.data_dir)
+        filings = filings_for(ticker, data_dir_for(ticker, settings))
     except FathomError as exc:
         return _error_json(exc)
     return json.dumps([filing.model_dump(mode="json") for filing in filings])
 
 
 @server.tool(description=_GET_BRIEFING_DESC)
-def get_briefing(ticker: str) -> str:
+def get_briefing(ticker: str, source: Literal["fixture", "live"] | None = None) -> str:
     """Return `Briefing.model_dump_json()` for `ticker`, or the error envelope."""
-    settings = Settings.from_env()
+    settings = _settings(source)
     try:
         briefing = brief_flow(ticker, settings)
     except FathomError as exc:
@@ -85,9 +95,11 @@ def get_briefing(ticker: str) -> str:
 
 
 @server.tool(description=_ASK_FILINGS_DESC)
-def ask_filings(ticker: str, question: str) -> str:
+def ask_filings(
+    ticker: str, question: str, source: Literal["fixture", "live"] | None = None
+) -> str:
     """Return `Answer.model_dump_json()` for `question` about `ticker`, or the error envelope."""
-    settings = Settings.from_env()
+    settings = _settings(source)
     try:
         answer = ask_flow(ticker, question, settings)
     except FathomError as exc:

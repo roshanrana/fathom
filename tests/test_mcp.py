@@ -133,3 +133,48 @@ def test_fr019_session_call_tool_get_quote_matches_direct_call() -> None:
 
     payload = _run(body)
     QuoteCard.model_validate_json(payload)
+
+
+# --- T-020 (FR-020): optional `source` argument routes through data_dir_for ---------------------
+
+
+def test_fr020_get_quote_source_live_routes_through_data_dir_for(
+    monkeypatch: pytest.MonkeyPatch, data_dir: Path
+) -> None:
+    calls: list[tuple[str, object]] = []
+
+    def fake_data_dir_for(ticker: str, settings: object) -> Path:
+        calls.append((ticker, settings))
+        return data_dir
+
+    monkeypatch.setattr(mcp_server, "data_dir_for", fake_data_dir_for)
+
+    payload = mcp_server.get_quote("AAPL", source="live")
+
+    QuoteCard.model_validate_json(payload)
+    assert len(calls) == 1
+    assert calls[0][0] == "AAPL"
+
+
+def test_fr020_list_filings_source_live_routes_through_data_dir_for(
+    monkeypatch: pytest.MonkeyPatch, data_dir: Path
+) -> None:
+    calls: list[tuple[str, object]] = []
+
+    def fake_data_dir_for(ticker: str, settings: object) -> Path:
+        calls.append((ticker, settings))
+        return data_dir
+
+    monkeypatch.setattr(mcp_server, "data_dir_for", fake_data_dir_for)
+
+    payload = mcp_server.list_filings("AAPL", source="live")
+
+    rows = json.loads(payload)
+    assert len(rows) == 5
+    assert len(calls) == 1
+
+
+def test_fr020_get_quote_source_default_none_uses_env_settings() -> None:
+    payload = mcp_server.get_quote("AAPL")
+
+    QuoteCard.model_validate_json(payload)

@@ -403,3 +403,28 @@ def test_nfr007_audit_record_matches_briefing_for_first_ticker(
 
 def test_fr007_prompts_and_filings_agree_on_canonical_sections() -> None:
     assert PROMPTS_CANONICAL_SECTIONS == FILINGS_CANONICAL_SECTIONS
+
+
+# --- T-020 (FR-020): brief() routes through data_dir_for -------------------------------------
+
+
+def test_fr020_brief_routes_through_data_dir_for(
+    data_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`brief()` must resolve its data directory via `data_dir_for`, not `settings.data_dir`."""
+    import fathom.briefing as briefing_module
+
+    calls: list[tuple[str, Settings]] = []
+    real_data_dir_for = briefing_module.data_dir_for
+
+    def spy(ticker: str, settings: Settings) -> Path:
+        calls.append((ticker, settings))
+        return real_data_dir_for(ticker, settings)
+
+    monkeypatch.setattr(briefing_module, "data_dir_for", spy)
+    settings = _settings(data_dir, tmp_path)
+
+    result = brief("AAPL", settings, provider=None)
+
+    assert result.ticker == "AAPL"
+    assert calls == [("AAPL", settings)]
