@@ -11,7 +11,7 @@ is quoted or summarised underneath it — nothing here is typed in from memory.
 uv run python scripts/check.py
 ```
 > Ran ruff lint/format, mypy strict (host and `--platform linux`), pytest, the secrets scan,
-> `fathom bench`, bench drift and card drift: **241 passed, 95.22% coverage, all checks passed.**
+> `fathom bench`, bench drift and card drift: **287 passed, 96.02% coverage, all checks passed.**
 
 ## 2. The page: header, quote, chart, filings
 
@@ -30,10 +30,10 @@ the question box) on the left, header/quote/chart/filings on the right, all in o
 
 <img src="assets/01-header-quote.png" alt="Header and quote card" width="820">
 
-**Header and quote card.** Company name, exchange/sector/industry and a website link, then five
-`st.metric` tiles — last close, 52-week range, market cap, P/E, dividend yield — each with its own
-"as of" caption naming the source fixture, so a figure is never shown without saying which
-snapshot it came from and when.
+**Header and quote card.** Company name, exchange/sector/industry and a website link, then six
+`st.metric` tiles — last close, 52-week low, 52-week high, market cap, P/E, dividend yield —
+followed by a single shared caption naming the source fixture and as-of date, so the figures are
+never shown without saying which snapshot they came from and when.
 
 <img src="assets/02-chart-filings.png" alt="One-year chart and filings table" width="820">
 
@@ -52,7 +52,7 @@ notable disclosures, talking points — each claim rendered as a bullet with a �
 ⚠️ unverified badge (never colour alone) and a "Source: form · date · section · accession"
 caption underneath. The disclaimer sits right below the last section, and the status strip at the
 bottom of the page names the provider, model, and the claim/verified counts for this exact
-briefing (`offline` / `extractive-v1` / 20 claims / 20 verified, in the screenshot above).
+briefing (`offline` / `extractive-v1` / 18 claims / 18 verified, in the screenshot above).
 
 ## 4. Ask a follow-up question, grounded in the same filings
 
@@ -72,7 +72,7 @@ never reaches a provider at all.
 uv run fathom brief AAPL --json | head -c 1500
 ```
 ```json
-{"ticker":"AAPL","company":"Apple Inc.","generated_at":"2026-09-12T15:21:02.441929Z","provider":"offline","model":"extractive-v1","filings_used":[{"ticker":"AAPL","cik":"0000320193","company_name":"Apple Inc.","form":"10-K","filing_date":"2025-10-31","period_end":"2025-09-27","accession":"0000320193-25-000079","edgar_url":"https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/","n_chars":206939},{"ticker":"AAPL","cik":"0000320193","company_name":"Apple Inc.","form":"10-Q","filing_date":"2026-05-01","period_end":"2026-03-28","accession":"0000320193-26-000013","edgar_url":"https://www.sec.gov/Archives/edgar/data/320193/000032019326000013/","n_chars":84873},{"ticker":"AAPL","cik":"0000320193","company_name":"Apple Inc.","form":"10-Q","filing_date":"2026-01-30","period_end":"2025-12-27","accession":"0000320193-26-000006","edgar_url":"https://www.sec.gov/Archives/edgar/data/320193/000032019326000006/","n_chars":57093}],"business_snapshot":[{"text":"Business\nCompany Background\nThe Company designs, manufactures and markets smartphones, personal computers, tablets, wearables and accessories, and sells a variety of related services.","source":{"accession":"0000320193-25-000079","section_id":"10-K:1"},"quote":"Business\nCompany Background\nThe Company designs, manufactures and markets smartphones, personal computers, tablets, wearables and accessories, and sells a variety of related services.","verified":true,"guarded":false},{"text":"The Company's fiscal year is the 52
+{"ticker":"AAPL","company":"Apple Inc.","generated_at":"2026-09-12T16:31:46.243957Z","provider":"offline","model":"extractive-v1","filings_used":[{"ticker":"AAPL","cik":"0000320193","company_name":"Apple Inc.","form":"10-K","filing_date":"2025-10-31","period_end":"2025-09-27","accession":"0000320193-25-000079","edgar_url":"https://www.sec.gov/Archives/edgar/data/320193/000032019325000079/","n_chars":206939},{"ticker":"AAPL","cik":"0000320193","company_name":"Apple Inc.","form":"10-Q","filing_date":"2026-05-01","period_end":"2026-03-28","accession":"0000320193-26-000013","edgar_url":"https://www.sec.gov/Archives/edgar/data/320193/000032019326000013/","n_chars":84873},{"ticker":"AAPL","cik":"0000320193","company_name":"Apple Inc.","form":"10-Q","filing_date":"2026-01-30","period_end":"2025-12-27","accession":"0000320193-26-000006","edgar_url":"https://www.sec.gov/Archives/edgar/data/320193/000032019326000006/","n_chars":57093}],"business_snapshot":[{"text":"The Company designs, manufactures and markets smartphones, personal computers, tablets, wearables and accessories, and sells a variety of related services.","source":{"accession":"0000320193-25-000079","section_id":"10-K:1"},"quote":"The Company designs, manufactures and markets smartphones, personal computers, tablets, wearables and accessories, and sells a variety of related services.","verified":true,"guarded":false},{"text":"The Company's fiscal year is the 52- or 53-week period that ends on the last Saturday of September.","source":{"accession":"0000320193-25-000079","section_id":"10-K:1"},"quote":"The Company's f
 ```
 > Truncated at 1500 bytes by `head -c`; the full JSON is the frozen `Briefing` contract
 > (`docs/design/03-lld.md` §3) with all six claim sections and the disclaimer.
@@ -117,7 +117,7 @@ byte-identical to what the `curl` call above returns:
   "data": {
     "ticker": "AAPL",
     "question_sha256": "ced50ee91c5e8b748985c5f0e256647069863cc9f1db215a6a1ceccbdcaca807",
-    "generated_at": "2026-09-12T15:21:10.486079Z",
+    "generated_at": "2026-09-12T16:32:19.614100Z",
     "provider": "offline",
     "model": "extractive-v1",
     "claims": [
@@ -137,7 +137,7 @@ byte-identical to what the `curl` call above returns:
   "meta": {
     "ticker": "AAPL",
     "provider": "offline",
-    "generated_at": "2026-09-12T15:21:10.486079+00:00"
+    "generated_at": "2026-09-12T16:32:19.614100+00:00"
   }
 }
 ```
@@ -189,6 +189,6 @@ uv run python scripts/screenshots.py
 > Started `streamlit run app/main.py --server.port 8765 --server.headless true` as a subprocess
 > (`FATHOM_LLM_PROVIDER=offline`, `FATHOM_AUDIT_PATH` pointed at a temp file), waited for the
 > port, clicked "Generate briefing" and asked "What are the main risk factors?", then wrote
-> `docs/assets/00-full-page.png` (142 KB), `01-header-quote.png` (44 KB), `02-chart-filings.png`
-> (76 KB), `03-briefing.png` (468 KB), and `04-ask.png` (68 KB) at 1440 px wide, scale 1 — all
+> `docs/assets/00-full-page.png` (138 KB), `01-header-quote.png` (40 KB), `02-chart-filings.png`
+> (76 KB), `03-briefing.png` (415 KB), and `04-ask.png` (68 KB) at 1440 px wide, scale 1 — all
 > under the 600 KB limit. The streamlit subprocess was then killed.

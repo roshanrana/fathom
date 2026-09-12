@@ -135,6 +135,18 @@ the append-only decision log [`decisions.md`](docs/design/decisions.md). Task pa
 verdicts are under [`docs/tasks/`](docs/tasks/); the hash-chained evidence ledger and per-task
 verification/security records are under [`docs/evidence/`](docs/evidence/).
 
+## What's inside
+
+- [`docs/assurance-report.md`](docs/assurance-report.md) — the assurance report summarising gate results, coverage and residual risk.
+- [`docs/ops/runbook.md`](docs/ops/runbook.md) — the operations runbook for running and recovering the service.
+- [`docs/ops/orr.md`](docs/ops/orr.md) — the operational readiness review.
+- [`docs/ops/change-record.md`](docs/ops/change-record.md) — the change record for this release.
+- [`docs/ops/demo-checklist.md`](docs/ops/demo-checklist.md) — the pre-demo checklist.
+- [`docs/pitch/fathom-pitch.pptx`](docs/pitch/fathom-pitch.pptx) — the one-slide pitch deck.
+
+  ![Pitch slide preview](docs/pitch/fathom-pitch.png)
+- [`docs/graph/README.md`](docs/graph/README.md) — the codebase knowledge graph.
+
 ## How it was built
 
 Fathom was built under the Shipyard lifecycle — frozen design docs gated before implementation,
