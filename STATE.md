@@ -1,5 +1,5 @@
 # STATE — Fathom
-Phase: 8 — shipped 2026-09-12 (v0.1.0)   Milestone: M3 (closed)   Wave: —   Updated: 2026-09-12T17:30:00Z
+Phase: 6 (re-entered for M4 after v0.1.0 ship)   Milestone: M4 — live data   Wave: W7   Updated: 2026-09-12T18:10:00Z
 
 **Gate command:** `uv run python scripts/check.py` (exists from T-000 onward).
 **Routing:** T3 (this session) designs and orchestrates only; all implementation, verification
@@ -10,7 +10,8 @@ prototype, one pitch slide, live-demo readiness. Due 2026-09-12.
 ## Now / next
 - G0–G6.2 passed; G3 re-entered twice (D-006/D-008, D-009) with evidence. Private repo `roshanrana/fathom`, CI green on every push.
 - Done (PASS): T-000 (v2), T-001, T-002, T-003, T-004, T-005, T-006 (closed after T-014), T-007, T-008, T-009, T-010, T-012, T-013 (v2), T-014. Security reviews CLEAR or closed.
-- Shipped: tag `v0.1.0`, all 18 packs PASS (T-000 … T-017), gates G0–G8 in the ledger (31 entries, chain valid), evidence pack exported under `docs/evidence/pack-2026-09-12/`, CI green on `main`.
+- M4 (owner request 2026-09-12: "work with data from live but free sources"): spec `docs/design/05-m4-live-data.md`, D-013, packs T-018 … T-021; G1–G4 re-entry for M4 ledgered. W7 = T-018 in progress.
+- Shipped v0.1.0 before M4: tag `v0.1.0`, all 18 packs PASS (T-000 … T-017), gates G0–G8 in the ledger (31 entries, chain valid), evidence pack exported under `docs/evidence/pack-2026-09-12/`, CI green on `main`.
 - Deliverables for the challenge: prototype (Streamlit `fathom app`, CLI, API, MCP), one slide `docs/pitch/fathom-pitch.pptx`, demo checklist `docs/ops/demo-checklist.md`.
 - Owner decisions pending: (1) make `roshanrana/fathom` public (currently private); (2) run the `portfolio-publish` skill (profile README, LinkedIn, resume) — approval gate first; (3) on interview day, set `PORTKEY_API_KEY` and run `fathom probe`; live verified share is read from the audit log.
 - Backlog unchanged (see below); none load-bearing for the demo.

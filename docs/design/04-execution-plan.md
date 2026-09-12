@@ -36,6 +36,15 @@ graphify scaffold (`.graphifyignore`, `graphify-out/GRAPH_REPORT.md`, `.claude/s
 | T-014 | M2 | Security fix — claim conversion never raises; question is data (D-007) | medium | T2 | normal | 40000/40/45 | T-006, T-007 | FR-006, FR-009, FR-018 |
 | T-015 | M3 | Provider transport/malformed-response errors; CLI guarded rendering (D-010, from G7) | medium | T2 | normal | 40000/40/45 | T-004, T-009 | FR-010, FR-013, NFR-002 |
 | T-016 | M3 | Demo polish — offline sentence heuristics, quote-card formatting (D-011) | low | T2 | normal | 40000/40/45 | T-008, T-013 | FR-002, FR-006, FR-012, FR-015 |
+| T-017 | M3 | Quote-card layout | low | T2 | normal | 15000/10/10 | T-016 | FR-012, NFR-011 |
+| T-018 | M4 | Live foundation — settings, errors, HTTP cache/throttle, SEC EDGAR client (D-013) | medium | T2 | high | 80000/80/120 | T-017 | FR-021, FR-025, NFR-013 |
+| T-019 | M4 | Live prices (Yahoo → Stooq) and XBRL valuation snapshot | medium | T2 | high | 80000/80/120 | T-018 | FR-022, FR-023 |
+| T-020 | M4 | Live materialization, data_dir_for, surface wiring, fetch command | medium | T2 | high | 80000/80/120 | T-018, T-019 | FR-020, FR-024, NFR-012 |
+| T-021 | M4 | Live mode — network smoke test, docs, demo checklist | low | T2 | normal | 40000/40/45 | T-020 | FR-020, NFR-012, NFR-013, FR-017 |
+
+M4 milestone: "Live data" — outcome: any US-listed ticker served from SEC EDGAR + Yahoo/Stooq in
+live mode; gate stays offline. Gate G6.4. Waves: W7 = T-018; W8 = T-019 (its HTTP layer comes
+from T-018 — serialised); W9 = T-020; W10 = T-021.
 
 FR-016 (fetch script) is delivered by the Orchestrator's foundation step and verified by T-001's
 fixture-schema tests. FR-017's pitch slide is produced by the Orchestrator at Phase 8.
