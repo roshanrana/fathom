@@ -155,7 +155,20 @@ Parser algorithm (frozen):
 5. Emit only canonical ids, in document order, with `char_start/char_end` into the normalised
    text. Missing canonical ids are simply absent (callers cope); a filing with zero canonical
    sections raises `PARSE_FAILED`.
-6. `period_end`: search the first 4 000 characters with
+7. Heading-vocabulary fallback (D-006). After step 4, for any canonical id whose chosen body is
+   shorter than 400 characters (cross-reference-sheet filings whose items point at page numbers),
+   scan the normalised text for heading lines — a line whose stripped content is at most 120
+   characters and starts, case-insensitively, with one of the id's title keys: `10-K:1`
+   {"description of the business", "business summary", "business"}, `10-K:1A` {"risk factors"},
+   `10-K:1C` {"cybersecurity"}, `10-K:3` {"legal proceedings"}, `10-K:7` {"management's discussion
+   and analysis", "management’s discussion and analysis"}, `10-K:7A` {"quantitative and qualitative
+   disclosures"}, `10-K:9A` {"controls and procedures"} (10-Q ids: the same keys for the matching
+   titles). Each candidate body runs from the end of the heading line to the next heading line
+   matching any key of any id, or the next Item header, or end of text. Choose the longest
+   candidate; use it only if it is longer than the step-4 body. The fallback must leave every
+   filing whose step-4 bodies are all ≥ 400 characters byte-identical (a regression test hashes
+   all sections of the other 96 fixtures before and after).
+8. `period_end`: search the first 4 000 characters with
    `re.compile(r"for the (?:fiscal|quarterly)?\s*(?:year|period)\s+ended\s+([A-Z][a-z]+)\s+(\d{1,2})\s*,?\s*(\d{4})", re.I | re.S)`; parse month name; None on failure.
 
 ### 2.6 `retrieval.py`
@@ -343,19 +356,19 @@ containing "liquidity" or "cash" (case-insensitive), else first 2 qualifying; `n
 sets `text = sentence` (except talking points) and `quote = sentence`. Ask: first qualifying
 sentence of each of the top 3 excerpts; `not_found` when none qualifies. Returns the JSON text.
 
-### 6.4 Advice patterns (frozen; case-insensitive)
+### 6.4 Advice patterns (frozen; case-insensitive; amended by D-006 — inflections on patterns 1, 3, 9; "stock price" on 11)
 ```
-\b(we|i|you|investors?|clients?|one)\s+(should|ought to|must|need to)\s+(buy|sell|hold|invest|avoid|add|trim|accumulate|short)\b
+\b(we|i|you|investors?|clients?|one)\s+(should|ought to|must|need to)\s+(buy|sell|hold|invest|avoid|add|trim|accumulate|short)\w*
 \b(strong\s+)?(buy|sell|hold)\s+(rating|recommendation|signal|call|idea)\b
-\brecommend(s|ed|ation|ations)?\b[^.]{0,60}\b(buy|sell|hold|purchas\w*|invest\w*|position)\b
+\brecommend(s|ed|ation|ations|ing)?\b[^.]{0,60}\b(buy\w*|sell\w*|hold\w*|purchas\w*|invest\w*|position)\b
 \bprice\s+target\b
 \b(over|under)weight\b
 \b(under|over)valued\b
 \b(good|great|excellent|bad|poor|terrible)\s+(investment|buy|entry point|time to (buy|sell))\b
 \b(buy|sell)\s+(the|this|these)\s+(stock|shares?|dip|name)\b
-\bshould\s+(i|you|we|they|clients?|investors?)\s+(buy|sell|hold|invest|short)\b
+\bshould\s+(i|you|we|they|clients?|investors?)\s+(buy|sell|hold|invest|short)\w*
 \bis\s+(it|this|\w+)\s+a\s+(good|bad|great|safe)\s+(investment|buy|stock|bet)\b
-\b(will|is|does)\s+(the\s+)?(stock|share price|price|it)\s+(go|going|likely to go|rise|fall|rally|crash)\b
+\b(will|is|does)\s+(the\s+)?(stock|share price|stock price|price|it)\s+(go|going|likely to go|rise|fall|rally|crash)\b
 \b(predict|forecast)\b[^.]{0,40}\b(price|stock)\b
 \b(bullish|bearish)\b
 \btop pick\b

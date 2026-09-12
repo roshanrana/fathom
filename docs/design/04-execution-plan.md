@@ -32,6 +32,7 @@ graphify scaffold (`.graphifyignore`, `graphify-out/GRAPH_REPORT.md`, `.claude/s
 | T-010 | M3 | Bench and metrics card | low | T2 | high | 80000/80/120 | T-003, T-006, T-007 | FR-015, NFR-001, NFR-004, NFR-007, NFR-008 |
 | T-011 | M3 | Documentation and screenshots | low | T2 | high | 80000/80/120 | T-008, T-009, T-010 | FR-017 |
 | T-012 | M3 | MCP server (Could) | low | T2 | normal | 40000/40/45 | T-006, T-007 | FR-019 |
+| T-013 | M3 | Polish — parser heading fallback, guard inflections, metrics regen (D-006) | medium | T2 | high | 80000/80/120 | T-006, T-007, T-010 | FR-005, FR-008, FR-015, FR-018, NFR-007, NFR-008 |
 
 FR-016 (fetch script) is delivered by the Orchestrator's foundation step and verified by T-001's
 fixture-schema tests. FR-017's pitch slide is produced by the Orchestrator at Phase 8.
@@ -54,6 +55,7 @@ T-000 ─┬─► T-001 ──────────────────�
 | W3 | T-003, T-005 | 2 |
 | W4 | T-006, T-007 | 2 |
 | W5 | T-008, T-009, T-010 | 3 |
+| W5b | T-013 (after T-010; serialised because it changes parser/guard outputs and the metrics) | 1 |
 | W6 | T-011, T-012 | 2 |
 
 Each completed task: Verifier (fresh Sonnet context, worktree pinned to the task's commit) →

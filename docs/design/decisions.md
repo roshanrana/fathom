@@ -79,3 +79,20 @@ Consequences: one code path from prompt to verified claims; the offline output i
 construction (quotes are the sentences themselves), which makes NFR-007's offline gate honest
 but not a measure of live quality — live verified share is reported from the audit log.
 Approver: Delivery lead (standing authorisation, D-000).
+
+## D-006 — G3 re-entry: parser heading fallback and guard inflections   (2026-09-12, phase 6, status: accepted)
+Context: T-006 found two defects in frozen specs. (1) McDonald's FY2025 10-K is a
+cross-reference-sheet filing: every "Item N." line points at a page number, so LLD §2.5's
+longest-body rule selects a 23-character stub and the briefing loses the business and risk
+sections. (2) LLD §6.4 patterns match `buy` but not `buying`, and pattern 11 omits "stock price";
+T-005's verifier flagged the same gap. Both are spec defects, not implementer defects.
+Options: (a) accept thin briefings for such filers and the inflection gap; (b) amend the frozen
+spec with a bounded fallback and inflection-tolerant patterns, re-validate the affected packs.
+Decision: (b). LLD §2.5 gains step 7 (heading-vocabulary fallback that activates only when the
+step-4 body is shorter than 400 characters and must leave every other filing's sections
+byte-identical); §6.4 patterns 1, 3, 9 accept inflections (`buy\w*` etc.) and pattern 11 adds
+"stock price". Delivered by polish pack T-013 after W5, which also regenerates the metrics.
+Consequences: T-006's MCD allowlist and reworded AC4 phrase are removed by T-013; the bench
+headline changes and is re-rendered; packs T-002/T-005 stay PASS (their verdicts predate the
+amendment; T-013's verifier re-checks the amended criteria).
+Approver: Architecture lead (standing authorisation, D-000).
